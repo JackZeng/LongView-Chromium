@@ -55,7 +55,10 @@ export function buildCampaignSummary(entries) {
 export function evaluateCampaign(campaign, thresholds = DEFAULT_THRESHOLDS) {
   const largest = campaign.entries.at(-1);
   if (!largest) throw new Error("Campaign has no benchmark entries");
-  const ratios = largest.ratios || compareSummaries(largest.baseline.summary, largest.longview.summary);
+  const ratios = {
+  ...compareSummaries(largest.baseline.summary, largest.longview.summary),
+  ...(largest.ratios || {})
+};
   const p95Delta = campaign.scaling.medianP95FrameTime.exponentDelta;
   const checks = [
     {
