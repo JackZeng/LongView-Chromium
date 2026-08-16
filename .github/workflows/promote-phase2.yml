@@ -1,0 +1,60 @@
+name: Promote phase 2 evidence and native policy
+
+on:
+  push:
+    branches: [staging/phase2-evidence-native-policy]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and apply verified patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .phase2-patch/part00.gz .phase2-patch/part01.gz > /tmp/longview-v0.2.patch.gz
+          echo "f9fedac3e31979dc65958e3f18bc14c8fe321f7ead383fa194ca0b469b1f4089  /tmp/longview-v0.2.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/longview-v0.2.patch.gz > /tmp/longview-v0.2.patch
+          echo "8b6783c2258ee1554e25f920656be748f20149cf00b7e97406a7c2e23b624417  /tmp/longview-v0.2.patch" | sha256sum -c -
+
+          git apply --check --whitespace=nowarn \
+            --exclude=.github/workflows/evidence-smoke.yml \
+            --exclude=SOURCE_MANIFEST.sha256 \
+            /tmp/longview-v0.2.patch
+          git apply --whitespace=nowarn \
+            --exclude=.github/workflows/evidence-smoke.yml \
+            --exclude=SOURCE_MANIFEST.sha256 \
+            /tmp/longview-v0.2.patch
+          rm -rf .phase2-patch
+
+      - name: Validate promoted sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/validate_extension.py
+          npm run check:js
+          npm test
+          PYTHONPATH="$PWD/tools" python3 -m unittest discover -s tools/tests -v
+          python3 -m compileall -q tools
+          cmake -S src/native -B build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --parallel 2
+          ctest --test-dir build/native --output-on-failure
+
+      - name: Commit promoted sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add phase 2 evidence campaign and native policy overlay"
+          git push origin "HEAD:staging/phase2-evidence-native-policy"

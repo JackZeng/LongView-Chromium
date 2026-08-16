@@ -1,9 +1,0 @@
-{
-  "channel": "stable",
-  "version": "151.0.7922.77",
-  "tag": "refs/tags/151.0.7922.77",
-  "commit": "ff37cfca210138f2a40b843b4a8195ab7e4fc7ff",
-  "branch_head": "7922_47",
-  "pinned_at": "2026-08-16",
-  "source": "https://chromium.googlesource.com/chromium/src/+/refs/tags/151.0.7922.77"
-}
