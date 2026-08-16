@@ -33,13 +33,31 @@ jobs:
         with:
           chrome-version: "${{ steps.pin.outputs.version }}"
           install-dependencies: true
-      - name: Verify dependency-free CDP driver
+      - name: Create CI-only sandbox wrapper
+        id: launcher
+        shell: bash
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: |
-          xvfb-run -a node benchmarks/runner/driver-smoke.mjs "${{ steps.chrome.outputs.chrome-path }}"
+          set -euo pipefail
+          launcher="$RUNNER_TEMP/longview-chrome"
+          cat > "$launcher" <<'EOF'
+          #!/usr/bin/env bash
+          exec "$CHROME_PATH" --no-sandbox "$@"
+          EOF
+          chmod +x "$launcher"
+          echo "path=$launcher" >> "$GITHUB_OUTPUT"
+      - name: Verify dependency-free CDP driver
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          xvfb-run -a node benchmarks/runner/driver-smoke.mjs "${{ steps.launcher.outputs.path }}"
       - name: Run two-scale baseline/LongView smoke campaign
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           xvfb-run -a node benchmarks/runner/campaign.mjs \
-            --executable "${{ steps.chrome.outputs.chrome-path }}" \
+            --executable "${{ steps.launcher.outputs.path }}" \
             --turns 100,500 \
             --runs 1 \
             --duration 1800 \
