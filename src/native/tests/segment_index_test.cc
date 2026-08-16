@@ -35,3 +35,4 @@ int main() {
 
   std::cout << "LongView segment index tests passed.\n";
   return 0;
+}
