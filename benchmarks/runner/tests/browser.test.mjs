@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { isLoopbackUrl, parseWebSocketDebuggerUrl, selectPageTarget } from "../browser.mjs";
-import { resolveServedFile } from "../runner.mjs";
+import { hasLiveLongViewStates, resolveServedFile } from "../runner.mjs";
 
 const targets = [
   { id: "devtools", type: "page", url: "devtools://devtools/bundled/" },
@@ -38,4 +38,11 @@ test("fixture resolution stays within the configured root", () => {
   assert.equal(resolveServedFile(root, "index.html"), path.resolve(root, "index.html"));
   assert.equal(resolveServedFile(root, "../secret"), null);
   assert.equal(resolveServedFile(root, path.resolve(root, "..", "outside.txt")), null);
+});
+
+test("LongView smoke accepts both hot and legacy active state names", () => {
+  assert.equal(hasLiveLongViewStates({ hot: 2, cold: 8 }), true);
+  assert.equal(hasLiveLongViewStates({ active: 2, cold: 8 }), true);
+  assert.equal(hasLiveLongViewStates({ active: 2, cold: 0 }), false);
+  assert.equal(hasLiveLongViewStates(null), false);
 });
