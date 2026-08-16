@@ -91,6 +91,12 @@ export function resolveServedFile(root, relative) {
   return file;
 }
 
+export function hasLiveLongViewStates(states) {
+  const active = Number(states?.hot ?? states?.active ?? 0);
+  const cold = Number(states?.cold ?? 0);
+  return Number.isFinite(active) && Number.isFinite(cold) && active > 0 && cold > 0;
+}
+
 async function serve(root) {
   const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, "http://127.0.0.1").pathname;
@@ -181,8 +187,7 @@ async function injectLongViewRuntime(client) {
   ];
   for (const relative of scripts) {
     const source = fs.readFileSync(path.join(repoRoot, "product/extension", relative), "utf8");
-    await client.evaluate(`${source}
-//# sourceURL=longview-inline://${relative}`);
+    await client.evaluate(`${source}\n//# sourceURL=longview-inline://${relative}`);
   }
 }
 
@@ -225,7 +230,6 @@ async function main() {
       executable: args.executable,
       userDataDir,
       extensionPath: args.longview && !args.inlineFixture ? extensionPath : null,
-      // Extension runs need a real window. On Linux CI use xvfb-run.
       headless: Boolean(args.headless && (!args.longview || args.inlineFixture)),
       browserArgs: [
         "--disable-background-timer-throttling",
@@ -271,7 +275,7 @@ async function main() {
         trace = await stopTrace(browser.browserClient, tracePath);
       }
       const after = await collectCdpSnapshot(browser.client);
-      if (args.longview && (!metrics?.longView?.hot || !metrics?.longView?.cold)) {
+      if (args.longview && !hasLiveLongViewStates(metrics?.longView)) {
         throw new Error(`LongView state disappeared during run: ${JSON.stringify(metrics?.longView)}`);
       }
       results.push({
