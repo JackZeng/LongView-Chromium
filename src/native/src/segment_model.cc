@@ -6,121 +6,163 @@
 namespace longview {
 namespace {
 
-double Clamp(double value, double minimum, double maximum) {
-  return std::min(maximum, std::max(minimum, value));
+bool IsFinitePositive(double value) {
+  return std::isfinite(value) && value > 0.0;
 }
 
 }  // namespace
 
-WorkingSet ComputeWorkingSet(double scroll_y,
-                             double viewport_height,
-                             double velocity_pixels_per_second,
-                             double document_height,
-                             const WorkingSetSettings& settings) {
-  viewport_height = std::max(1.0, viewport_height);
-  document_height = std::max(viewport_height, document_height);
-  scroll_y = Clamp(scroll_y, 0.0, document_height);
-
-  const int direction = velocity_pixels_per_second == 0.0
-                            ? 0
-                            : (velocity_pixels_per_second > 0.0 ? 1 : -1);
-  const double predicted_pixels =
-      std::abs(velocity_pixels_per_second) * settings.prediction_seconds;
-  const double prediction_boost = Clamp(
-      predicted_pixels / viewport_height, 0.0,
-      settings.maximum_prediction_boost_screens);
-
-  double ahead = settings.warm_ahead_screens;
-  double behind = settings.warm_behind_screens;
-  if (direction > 0) {
-    ahead += prediction_boost;
-  } else if (direction < 0) {
-    behind += prediction_boost;
+EligibilityResult EvaluateEligibility(const EligibilityInput& input,
+                                      const PolicyConfig& config) {
+  if (!std::isfinite(input.start) || !std::isfinite(input.end) ||
+      input.end <= input.start || !IsFinitePositive(input.block_size)) {
+    return {false, false, IneligibleReason::kInvalidGeometry};
   }
-
-  const double hot_padding = settings.hot_screens * viewport_height;
-  WorkingSet result;
-  result.hot_top = Clamp(scroll_y - hot_padding, 0.0, document_height);
-  result.hot_bottom = Clamp(scroll_y + viewport_height + hot_padding, 0.0,
-                            document_height);
-  result.warm_top =
-      Clamp(scroll_y - behind * viewport_height, 0.0, document_height);
-  result.warm_bottom = Clamp(
-      scroll_y + viewport_height + ahead * viewport_height, 0.0,
-      document_height);
-  result.direction = direction;
-  return result;
+  if (input.block_size < config.minimum_block_size) {
+    return {false, false, IneligibleReason::kTooSmall};
+  }
+  if (input.has_focus || input.has_selection || input.is_editable) {
+    return {true, true, IneligibleReason::kActiveInteraction};
+  }
+  if (input.has_live_media) {
+    return {true, true, IneligibleReason::kLiveMedia};
+  }
+  if (input.has_canvas || input.has_webgl || input.has_dialog ||
+      input.has_popover) {
+    return {false, false, IneligibleReason::kDynamicSurface};
+  }
+  if (input.has_cross_boundary_sticky || input.has_fixed_descendant) {
+    return {false, false, IneligibleReason::kCrossBoundaryPositioning};
+  }
+  if (input.recent_materializations >= config.pin_after_materializations) {
+    return {true, true, IneligibleReason::kFrequentlyMaterialized};
+  }
+  return {true, false, IneligibleReason::kNone};
 }
 
-SegmentState ClassifySegment(const SegmentGeometry& geometry,
-                             const WorkingSet& working_set) {
-  if (geometry.bottom() >= working_set.hot_top &&
-      geometry.top <= working_set.hot_bottom) {
+WorkingSet ComputeWorkingSet(const Viewport& viewport,
+                             const PolicyConfig& config) {
+  const double viewport_size = std::max(1.0, viewport.end - viewport.start);
+  const double normalized_speed = std::clamp(
+      std::abs(viewport.velocity) / std::max(1.0, config.velocity_reference),
+      0.0, config.velocity_cap);
+  const double ahead = config.warm_ahead_viewports +
+                       normalized_speed * config.speed_ahead_viewports;
+  const double behind = config.warm_behind_viewports +
+                        normalized_speed * config.speed_behind_viewports;
+
+  WorkingSet set;
+  set.hot_start = viewport.start - viewport_size * config.hot_viewports;
+  set.hot_end = viewport.end + viewport_size * config.hot_viewports;
+  if (viewport.direction >= 0) {
+    set.warm_start = viewport.start - viewport_size * behind;
+    set.warm_end = viewport.end + viewport_size * ahead;
+  } else {
+    set.warm_start = viewport.start - viewport_size * ahead;
+    set.warm_end = viewport.end + viewport_size * behind;
+  }
+  return set;
+}
+
+SegmentState Classify(const Segment& segment,
+                      const WorkingSet& set,
+                      const PolicyConfig& config,
+                      std::uint64_t now_ms) {
+  if (!segment.eligible) {
     return SegmentState::kHot;
   }
-  if (geometry.bottom() >= working_set.warm_top &&
-      geometry.top <= working_set.warm_bottom) {
+  if (segment.pinned ||
+      segment.materialization_timestamps.size() >=
+          config.pin_after_materializations) {
+    return SegmentState::kPinned;
+  }
+  if (segment.end >= set.hot_start && segment.start <= set.hot_end) {
+    return SegmentState::kHot;
+  }
+  if (segment.end >= set.warm_start && segment.start <= set.warm_end) {
+    return SegmentState::kWarm;
+  }
+  if (segment.state == SegmentState::kHot &&
+      now_ms < segment.last_hot_ms + config.hot_demotion_delay_ms) {
+    return SegmentState::kWarm;
+  }
+  if (segment.state == SegmentState::kWarm &&
+      now_ms < segment.last_warm_ms + config.warm_demotion_delay_ms) {
     return SegmentState::kWarm;
   }
   return SegmentState::kCold;
 }
 
-SegmentLifecycle::SegmentLifecycle(SegmentGeometry geometry)
-    : geometry_(geometry) {}
-
-bool SegmentLifecycle::IsPinned(TimePoint now) const {
-  return pinned_until_ != TimePoint{} && now < pinned_until_;
-}
-
-void SegmentLifecycle::SetGeometry(SegmentGeometry geometry) {
-  geometry_ = geometry;
-}
-
-bool SegmentLifecycle::TransitionTo(SegmentState next, TimePoint now) {
-  if (IsPinned(now)) {
-    next = SegmentState::kPinned;
-  }
-  if (state_ == next) {
-    return false;
-  }
-  state_ = next;
-  ++transition_count_;
-  return true;
-}
-
-void SegmentLifecycle::RemoveExpiredMaterializations(TimePoint now) {
-  constexpr auto kWindow = std::chrono::seconds(2);
-  while (!recent_materializations_.empty() &&
-         now - recent_materializations_.front() > kWindow) {
-    recent_materializations_.pop_front();
+void PruneMaterializations(Segment* segment,
+                           const PolicyConfig& config,
+                           std::uint64_t now_ms) {
+  while (!segment->materialization_timestamps.empty() &&
+         now_ms - segment->materialization_timestamps.front() >
+             config.materialization_window_ms) {
+    segment->materialization_timestamps.pop_front();
   }
 }
 
-void SegmentLifecycle::RecordMaterialization(MaterializationReason reason,
-                                             TimePoint now) {
-  last_materialization_reason_ = reason;
-  recent_materializations_.push_back(now);
-  RemoveExpiredMaterializations(now);
-
-  // Repeated off-screen access is a signal that freezing this segment would
-  // thrash. Pin it briefly so the caller can keep authoritative state warm.
-  if (recent_materializations_.size() >= 3) {
-    pinned_until_ = std::max(pinned_until_, now + std::chrono::seconds(5));
-  } else if (reason == MaterializationReason::kFocus ||
-             reason == MaterializationReason::kSelection ||
-             reason == MaterializationReason::kAccessibility) {
-    pinned_until_ = std::max(pinned_until_, now + std::chrono::seconds(3));
+std::string_view SegmentStateName(SegmentState state) {
+  switch (state) {
+    case SegmentState::kHot:
+      return "hot";
+    case SegmentState::kWarm:
+      return "warm";
+    case SegmentState::kCold:
+      return "cold";
+    case SegmentState::kPinned:
+      return "pinned";
   }
+  return "unknown";
 }
 
-SegmentState SegmentLifecycle::ResolveDesiredState(
-    SegmentState working_set_state,
-    TimePoint now) {
-  RemoveExpiredMaterializations(now);
-  if (IsPinned(now)) {
-    return SegmentState::kPinned;
+std::string_view MaterializationReasonName(MaterializationReason reason) {
+  switch (reason) {
+    case MaterializationReason::kViewportApproach:
+      return "viewport-approach";
+    case MaterializationReason::kGeometryQuery:
+      return "geometry-query";
+    case MaterializationReason::kFindInPage:
+      return "find-in-page";
+    case MaterializationReason::kFocus:
+      return "focus";
+    case MaterializationReason::kSelection:
+      return "selection";
+    case MaterializationReason::kAnchorNavigation:
+      return "anchor-navigation";
+    case MaterializationReason::kAccessibility:
+      return "accessibility";
+    case MaterializationReason::kScreenshot:
+      return "screenshot";
+    case MaterializationReason::kPrint:
+      return "print";
+    case MaterializationReason::kScriptMutation:
+      return "script-mutation";
   }
-  return working_set_state;
+  return "unknown";
+}
+
+std::string_view IneligibleReasonName(IneligibleReason reason) {
+  switch (reason) {
+    case IneligibleReason::kNone:
+      return "none";
+    case IneligibleReason::kInvalidGeometry:
+      return "invalid-geometry";
+    case IneligibleReason::kTooSmall:
+      return "too-small";
+    case IneligibleReason::kActiveInteraction:
+      return "active-interaction";
+    case IneligibleReason::kLiveMedia:
+      return "live-media";
+    case IneligibleReason::kDynamicSurface:
+      return "dynamic-surface";
+    case IneligibleReason::kCrossBoundaryPositioning:
+      return "cross-boundary-positioning";
+    case IneligibleReason::kFrequentlyMaterialized:
+      return "frequently-materialized";
+  }
+  return "unknown";
 }
 
 }  // namespace longview

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LongView evidence campaign",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "metadata",
+    "entries",
+    "scaling",
+    "gate"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "generatedAt",
+        "executable",
+        "turns",
+        "runsPerVariant",
+        "durationMs",
+        "host",
+        "trace",
+        "tracePolicy",
+        "browserVersion"
+      ],
+      "properties": {
+        "trace": {
+          "type": "boolean"
+        },
+        "tracePolicy": {
+          "enum": [
+            "none",
+            "largest-scale",
+            "all-scales"
+          ]
+        },
+        "browserVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "turns",
+          "baseline",
+          "longview",
+          "ratios"
+        ]
+      }
+    },
+    "scaling": {
+      "type": "object"
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "passed",
+        "checks",
+        "thresholds"
+      ]
+    }
+  }
+}

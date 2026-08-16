@@ -1,17 +1,23 @@
-# Native segment model
+# Native lifecycle and eligibility model
 
-This small dependency-free C++ library is the executable specification for the future Blink-native lifecycle. It defines:
+This dependency-free C++20 library is the specification for LongView's native policy.
 
-- HOT/WARM/COLD/PINNED states;
-- velocity-aware working-set prediction;
-- segment classification;
-- materialization reasons;
-- anti-thrashing promotion after repeated off-screen access.
+It implements:
 
-It deliberately has no Chromium headers so the policy can be unit-tested quickly before it is transplanted into Blink. It is not yet wired into Chromium's renderer lifecycle.
+- HOT/WARM/COLD/PINNED state classification;
+- conservative eligibility decisions and exclusion reasons;
+- direction/speed working sets;
+- HOT/WARM demotion hysteresis;
+- ordered segment indexing;
+- materialization reason counters;
+- anti-thrashing pinning.
+
+Build:
 
 ```bash
-cmake -S src/native -B build/native
-cmake --build build/native
+cmake -S src/native -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native --parallel 2
 ctest --test-dir build/native --output-on-failure
 ```
+
+The policy does not own Blink objects. `chromium_overlay/` mirrors the model into an independent Chromium GN target. Native engine integration remains gated behind `blink::features::kLongViewSegmentLifecycle`, which is disabled by default.

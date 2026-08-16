@@ -1,0 +1,20 @@
+# Installed at //longview by tools/longview.py install-overlay.
+
+source_set("segment_policy") {
+  sources = [
+    "longview/common/longview_policy.cc",
+    "longview/common/longview_policy.h",
+    "longview/common/segment_index.cc",
+    "longview/common/segment_index.h",
+  ]
+}
+
+executable("segment_policy_test") {
+  sources = [ "longview/common/tests/longview_policy_unittest.cc" ]
+  deps = [ ":segment_policy" ]
+}
+
+executable("blink_feature_probe") {
+  sources = [ "blink_feature_probe.cc" ]
+  deps = [ "//third_party/blink/renderer/platform:platform" ]
+}

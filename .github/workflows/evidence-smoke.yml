@@ -1,0 +1,87 @@
+name: evidence-smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "benchmarks/**"
+      - "product/extension/**"
+      - "chromium.version"
+      - ".github/workflows/evidence-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Read pinned Chromium version
+        id: pin
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("chromium.version"))["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install matching Chrome for Testing
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: "${{ steps.pin.outputs.version }}"
+          install-dependencies: true
+      - name: Create CI-only sandbox wrapper
+        id: launcher
+        shell: bash
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          set -euo pipefail
+          launcher="$RUNNER_TEMP/longview-chrome"
+          cat > "$launcher" <<WRAPPER
+          #!/usr/bin/env bash
+          exec "$CHROME_PATH" --no-sandbox "\$@"
+          WRAPPER
+          chmod +x "$launcher"
+          echo "path=$launcher" >> "$GITHUB_OUTPUT"
+      - name: Verify dependency-free CDP driver
+        run: node benchmarks/runner/driver-smoke.mjs "${{ steps.launcher.outputs.path }}"
+      - name: Run deterministic inline baseline and LongView smoke matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for turns in 100 500; do
+            scale="benchmark-results/evidence-smoke/$turns"
+            mkdir -p "$scale"
+            node benchmarks/runner/runner.mjs \
+              --executable "${{ steps.launcher.outputs.path }}" \
+              --turns "$turns" \
+              --runs 1 \
+              --duration 1800 \
+              --stress \
+              --headless \
+              --inline-fixture \
+              --output "$scale/baseline.json"
+            node benchmarks/runner/runner.mjs \
+              --executable "${{ steps.launcher.outputs.path }}" \
+              --turns "$turns" \
+              --runs 1 \
+              --duration 1800 \
+              --stress \
+              --headless \
+              --inline-fixture \
+              --longview \
+              --output "$scale/longview.json"
+            node benchmarks/runner/compare.mjs \
+              "$scale/baseline.json" \
+              "$scale/longview.json" \
+              "$scale/comparison.json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longview-evidence-smoke
+          path: benchmark-results/evidence-smoke/**
+          if-no-files-found: error

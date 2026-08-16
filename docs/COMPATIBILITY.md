@@ -1,48 +1,59 @@
 # Compatibility contract
 
-LongView optimizes only when it can preserve ordinary web behavior. Conservative mode is the default.
+LongView's default mode may optimize only behavior that remains observationally compatible with the web platform. Aggressive experiments must be opt-in and clearly labeled.
 
-## Core invariants
+## Required materialization operations
 
-1. Site-owned DOM nodes are not deleted or replaced.
-2. Node identity, event listeners, and framework state remain intact.
-3. Scroll height is preserved with measured intrinsic block size.
-4. Focused, selected, searched, or actively accessed content is materialized.
-5. Active audio/video and open dialog/popover regions are not enrolled as cold segments.
-6. The optimization can be removed from a page and original inline properties are restored.
-7. Aggressive behavior is opt-in.
+A cold segment is restored before authoritative state is needed for:
 
-## Observable operations
+- `getBoundingClientRect`, `getClientRects`, `offset*`, and computed geometry;
+- `scrollIntoView` and anchor navigation;
+- find-in-page and `beforematch`;
+- focus, tab order, editable content, and IME;
+- selection and clipboard operations;
+- accessibility tree traversal;
+- screenshots and printing;
+- script mutation requiring layout or paint state;
+- observer delivery when geometry must be current.
 
-| Operation | v0.1 behavior |
-|---|---|
-| Normal scroll into a cold segment | Chromium materializes `content-visibility:auto` content before display; LongView predicts and promotes nearby segments |
-| `find` / find-in-page | `beforematch` pins the containing segment when Chromium exposes the match event |
-| Focus or tab navigation | `focusin` pins the containing segment |
-| Text selection | Anchor and focus segments are pinned while the selection is active |
-| `scrollIntoView()` | Browser geometry remains available; the target enters the predicted/hot range after scroll |
-| `getBoundingClientRect()` | DOM remains present; Chromium may perform the required layout work |
-| Dynamic append / stream | Mutation observer re-discovers candidates after a debounce |
-| Segment height change | Resize observer covers HOT/WARM/PINNED segments and rebuilds geometry |
-| Open dialog/popover | Segment is ineligible while the active surface is present |
-| Playing media | Segment is ineligible while media is active at discovery |
-| Screenshot / print | Browser remains authoritative; no DOM serialization or snapshot substitution is used |
-| Accessibility | DOM remains present. Full screen-reader regression testing is required before native accessibility-state eviction |
+## First native exclusions
 
-## Risky-page policy
+A candidate remains fully active when it contains:
 
-Conservative mode avoids automatic activation on document-scale editors such as Monaco, CodeMirror, Slate roots, body-level contenteditable applications, fullscreen content, or canvas-heavy applications. A normal chat composer does not by itself classify the whole page as an editor.
+- current focus or selection;
+- editable content;
+- playing audio/video;
+- Canvas or WebGL;
+- dialogs or popovers;
+- fixed descendants;
+- cross-boundary sticky behavior;
+- invalid or very small geometry;
+- repeated recent materializations.
 
-Users may exclude hostnames in settings. Patterns can be exact (`example.com`) or wildcard subdomains (`*.example.com`).
+## Invariants
 
-## Aggressive mode
+1. Total scroll geometry remains stable across lifecycle transitions.
+2. Segment identity remains stable.
+3. A script-visible query never returns placeholder geometry as authoritative state.
+4. Find, focus, selection, accessibility, screenshot, and print may add latency but not incorrect results.
+5. Repeated faults cause pinning rather than materialization thrash.
+6. The default Blink feature remains disabled until compatibility coverage is sufficient.
 
-Aggressive mode keeps the same DOM and geometry behavior but pauses CSS animation and removes transition work inside COLD segments. This may visibly change background animations when the user jumps directly to a distant location; it therefore remains opt-in.
+## Current MVP behavior
 
-## Known v0.1 limitations
+The extension runtime uses `content-visibility` and `contain-intrinsic-size`. Compatibility mode uses `auto`; aggressive mode may use stronger hiding on controlled documents. The runtime never deletes site-owned DOM.
 
-- Pages with no stable repeated or section-like block boundaries may not activate.
-- A site that continuously reads geometry for thousands of off-screen nodes can still force work.
-- Framework reconciliation, JavaScript heaps, and accessibility structures remain allocated.
-- Deep sticky/fixed descendants are handled conservatively only at candidate-root level in v0.1.
-- Browser-managed find behavior varies by Chromium version; the benchmark includes explicit probes.
+## Native test matrix
+
+The native phase must include web tests for:
+
+- normal vertical and horizontal writing modes;
+- nested scrollers;
+- tables and fragmented content;
+- cross-segment selection;
+- focusable elements and tab order;
+- hidden-until-found content;
+- platform accessibility services;
+- print preview and screenshots;
+- active media and dynamic rendering surfaces;
+- distant mutations and geometry queries.

@@ -1,15 +1,21 @@
-# Chromium patch series
+# Chromium patch layer
 
-LongView keeps Chromium itself in a separate checkout pinned by `chromium.version`. Native Chromium changes belong here as a small ordered patch series rather than as a vendored multi-gigabyte source tree.
+LongView does not vendor the Chromium source tree. Native upstream-file changes are stored as reviewable patches pinned to `chromium.version`.
 
-`series.json` is the machine-readable manifest. v0.1 intentionally contains no invasive Chromium patch: its optimization mechanism is the measured browser runtime in `product/extension/`, while `src/native/` specifies the policy that will migrate into Blink.
+```text
+patches/
+├── series.json
+└── blink/
+    ├── README.md
+    └── 0001-longview-observability-feature.patch
+```
 
-Future patches must:
+Apply the first candidate:
 
-1. name the exact Chromium pin they apply to;
-2. include a SHA-256 digest in `series.json`;
-3. remain small enough to review independently;
-4. include benchmark evidence and compatibility tests;
-5. avoid mixing browser branding, performance changes and unrelated refactors.
+```bash
+python3 tools/longview.py install-blink-observability
+```
 
-A patch is not accepted merely because a synthetic page looks smoother. It must preserve geometry reads, focus, selection, find-in-page, anchors, accessibility, screenshot and print behavior relevant to its scope.
+The installer verifies the exact Chromium commit, checks patch applicability, records metadata, and refuses an unexpected dirty checkout unless `--force` is supplied.
+
+Patch `0001` is intentionally small: it adds a disabled-by-default Blink feature gate. It does not change rendering behavior.

@@ -1,44 +1,52 @@
-# Product definition
+# Product specification
 
-## Promise
+## Product promise
 
-LongView Chromium is the browser for pages that keep growing.
+LongView is a Chromium browser for pages whose content grows far beyond a normal viewport. The user should be able to continue a long AI conversation, inspect a large log, or read a huge document without scrolling cost growing in direct proportion to total page size.
 
-A user should be able to keep a long AI conversation, technical document, log stream, notebook, or feed open without the browser becoming progressively less responsive merely because old content still exists above the viewport.
+## Initial users
 
-## Primary user experience
+- heavy ChatGPT, Claude, and Gemini users;
+- developers reading large traces, logs, documentation, and notebooks;
+- researchers testing browser working-set policies;
+- operators using long feeds or dashboards.
 
-LongView is automatic and quiet:
+## User-visible MVP
 
-1. A normal page behaves exactly like Chromium.
-2. Once a page becomes pathologically long, LongView discovers safe segment boundaries.
-3. The current viewport stays HOT.
-4. Content in the likely scroll direction becomes WARM.
-5. Distant content becomes COLD and lets Chromium skip off-screen rendering work.
-6. Search, selection, focus, or direct navigation immediately pins relevant content.
+- standard native Chromium tabs and navigation;
+- a LongView toolbar control;
+- site/page enable switch;
+- compatibility and aggressive modes;
+- diagnostics for segment count, states, velocity, frame time, memory, and long tasks;
+- deterministic built-in benchmark page through the repository fixture;
+- unchanged site-owned DOM.
 
-The toolbar answers three questions:
+## Success criteria
 
-- Is LongView active here?
-- How much of the page is HOT/WARM/COLD?
-- Is the page using a known site adapter or generic segmentation?
+The primary metric is not a single speedup. It is lower growth with page scale.
 
-## Initial target scenarios
+For 100 → 500 → 1000 → 2000 turn fixtures:
 
-- very long ChatGPT conversations;
-- long Claude and Gemini conversations;
-- generated reports and Markdown documents;
-- documentation portals;
-- logs and event streams;
-- forums and issue threads;
-- feed-style applications;
-- notebooks with many rendered cells.
+- LongView p95/p99 frame-time exponent should be lower than baseline;
+- dropped-frame ratio should grow more slowly;
+- layout/style/task duration should grow more slowly;
+- no correctness probe may fail;
+- no increase in blank/checkerboard behavior is acceptable;
+- memory growth must be reported even if it is not yet improved.
 
-## Product principles
+## Compatibility strategy
 
-- Web compatibility before benchmark theater.
-- Same pinned Chromium binary for baseline and variant.
-- General engine policy before brittle site hacks.
-- Site adapters only to identify better boundaries, not to rewrite application state.
-- Every claimed improvement includes reproducible evidence.
-- Native complexity is added only after a measured bottleneck justifies it.
+Compatibility is the default. Unknown/high-risk content remains hot. Repeated materialization pins a segment instead of repeatedly faulting. Aggressive behavior is limited to controlled pages and experiments.
+
+## Distribution boundary
+
+A build can be called a LongView development browser after it is built from the pinned Chromium revision and launches with the LongView runtime.
+
+It cannot be called production-ready until it has:
+
+- platform code signing and notarization;
+- an update channel tracking supported Chromium security releases;
+- crash reporting and rollback;
+- privacy review;
+- macOS/Windows product testing;
+- accessibility validation.
