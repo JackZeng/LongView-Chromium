@@ -22,7 +22,15 @@ function report(p95, dropped, heap, nodes, correctness = true) {
       medianScriptDuration: p95 / 900,
       medianTaskDuration: p95 / 700
     },
-    runs: [{ correctness: { ok: correctness } }]
+    runs: [{
+      correctness: {
+        ok: correctness,
+        geometryFinite: correctness,
+        focusWorks: correctness,
+        selectionWorks: correctness,
+        anchorWorks: correctness
+      }
+    }]
   };
 }
 
