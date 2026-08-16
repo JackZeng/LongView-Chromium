@@ -1,0 +1,41 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node tooling
+node_modules/
+.npm/
+
+# Benchmark output
+benchmark-results/
+traces/
+*.trace.json
+*.perfetto-trace
+
+# Chromium / depot_tools local state
+chromium/
+depot_tools/
+src-out/
+out/
+.gclient
+.gclient_entries
+
+# Local build artifacts
+build/
+dist/
+tmp/
+.cache/
+
+# Logs
+*.log

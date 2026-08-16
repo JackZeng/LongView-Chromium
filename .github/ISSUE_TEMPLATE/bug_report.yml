@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a LongView correctness, crash, or performance regression
+title: "[Bug] "
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include fixture/URL, steps, scale, and relevant browser flags.
+    validations:
+      required: true
+  - type: textarea
+    id: build
+    attributes:
+      label: Build information
+      description: LongView commit, Chromium upstream SHA, OS, CPU/GPU, RAM, display refresh rate.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Traces, screenshots, metrics, crash IDs, or logs.
