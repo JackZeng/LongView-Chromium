@@ -12,7 +12,7 @@ jobs:
     runs-on: [self-hosted, longview-macos]
     timeout-minutes: 360
     env:
-      LONGVIEW_WORKSPACE: ${{ runner.tool_cache }}/longview-chromium-151
+      LONGVIEW_WORKSPACE: ${{ github.workspace }}/.longview-native
       PYTHONPATH: ${{ github.workspace }}/tools
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
     runs-on: [self-hosted, longview-windows]
     timeout-minutes: 360
     env:
-      LONGVIEW_WORKSPACE: ${{ runner.tool_cache }}/longview-chromium-151
+      LONGVIEW_WORKSPACE: ${{ github.workspace }}/.longview-native
       PYTHONPATH: ${{ github.workspace }}/tools
     steps:
       - uses: actions/checkout@v4
