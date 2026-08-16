@@ -41,28 +41,47 @@ jobs:
         run: |
           set -euo pipefail
           launcher="$RUNNER_TEMP/longview-chrome"
-          cat > "$launcher" <<'EOF'
+          cat > "$launcher" <<'WRAPPER'
           #!/usr/bin/env bash
           exec "$CHROME_PATH" --no-sandbox "$@"
-          EOF
+          WRAPPER
           chmod +x "$launcher"
           echo "path=$launcher" >> "$GITHUB_OUTPUT"
       - name: Verify dependency-free CDP driver
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: node benchmarks/runner/driver-smoke.mjs "${{ steps.launcher.outputs.path }}"
+      - name: Run deterministic inline baseline and LongView smoke matrix
+        shell: bash
         run: |
-          xvfb-run -a node benchmarks/runner/driver-smoke.mjs "${{ steps.launcher.outputs.path }}"
-      - name: Run two-scale baseline/LongView smoke campaign
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: |
-          xvfb-run -a node benchmarks/runner/campaign.mjs \
-            --executable "${{ steps.launcher.outputs.path }}" \
-            --turns 100,500 \
-            --runs 1 \
-            --duration 1800 \
-            --stress \
-            --outputDir benchmark-results/evidence-smoke
+          set -euo pipefail
+          for turns in 100 500; do
+            scale="benchmark-results/evidence-smoke/$turns"
+            mkdir -p "$scale"
+            node benchmarks/runner/runner.mjs \
+              --executable "${{ steps.launcher.outputs.path }}" \
+              --turns "$turns" \
+              --runs 1 \
+              --duration 1800 \
+              --stress \
+              --headless \
+              --inline-fixture \
+              --output "$scale/baseline.json"
+            node benchmarks/runner/runner.mjs \
+              --executable "${{ steps.launcher.outputs.path }}" \
+              --turns "$turns" \
+              --runs 1 \
+              --duration 1800 \
+              --stress \
+              --headless \
+              --inline-fixture \
+              --longview \
+              --output "$scale/longview.json"
+            node benchmarks/runner/compare.mjs \
+              "$scale/baseline.json" \
+              "$scale/longview.json" \
+              "$scale/comparison.json"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: longview-evidence-smoke
