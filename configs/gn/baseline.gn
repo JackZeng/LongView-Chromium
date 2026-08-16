@@ -1,0 +1,5 @@
+is_debug = false
+is_component_build = false
+symbol_level = 0
+enable_nacl = false
+use_remoteexec = false

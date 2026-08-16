@@ -1,108 +1,72 @@
-# LongView Chromium Roadmap
+# LongView Chromium roadmap
 
-The roadmap is evidence-driven. A phase advances only after the previous phase has reproducible measurements.
+## Phase 0 — foundation — complete
 
-## Phase 0 — Foundation
+- establish repository and engineering principles;
+- pin an exact stable Chromium revision;
+- define benchmark and compatibility contracts;
+- create build profiles and cross-platform bootstrap tooling.
 
-Goal: make the project reproducible before touching Chromium internals.
+## Phase 1 — working browser MVP — complete in v0.1
 
-- Pin an upstream Chromium revision.
-- Document macOS and Windows checkout/build procedures.
-- Establish benchmark conventions and trace storage format.
-- Add synthetic long-page fixtures.
-- Add a ChatGPT-like dynamic conversation fixture that does not depend on a live third-party service.
-- Define baseline metrics and acceptance criteria.
+- load LongView into a Chromium build;
+- discover site-specific and generic long-page segments;
+- implement HOT/WARM/COLD/PINNED lifecycle;
+- predict scroll direction and velocity;
+- preserve focus, selection, find, geometry, and dynamic-content behavior;
+- expose controls and diagnostics;
+- provide developer packaging.
 
-Exit criteria:
+## Phase 2 — evidence campaign — next
 
-- A contributor can reproduce the same baseline on a supported machine.
-- Benchmark outputs contain enough metadata to compare builds honestly.
+- run baseline and LongView on representative Apple Silicon Macs and Windows PCs;
+- collect 100/500/1000/2000-turn scaling curves;
+- separate main-thread, style, layout, paint, raster, GC, memory, and accessibility costs;
+- tune segment granularity, intrinsic-size policy, warm distance, and hysteresis;
+- publish reproducible result bundles and Perfetto traces.
 
-## Phase 1 — Browser-level prototype
+Exit criterion: demonstrate where v0.1 changes the scaling curve and identify the largest remaining total-document cost.
 
-Goal: estimate the upper bound of gains from reducing off-screen rendering work before deep engine changes.
+## Phase 3 — Blink-native lifecycle
 
-Experiments:
+- add engine-owned `LongPageSegment` eligibility and lifecycle behind a disabled-by-default feature flag;
+- move materialization reasons and anti-thrashing policy into Blink;
+- add UMA/tracing diagnostics for transitions and forced materialization;
+- integrate style/layout/paint invalidation boundaries conservatively;
+- add web tests for all compatibility operations.
 
-- segment discovery heuristics;
-- `content-visibility: auto`;
-- containment and intrinsic-size strategies;
-- observer/media/animation handling where standards-compliant;
-- viewport-distance based HOT/WARM/COLD policy in a prototype layer.
+Exit criterion: native prototype beats the extension runtime on retained work without breaking the compatibility suite.
 
-Exit criteria:
+## Phase 4 — scheduler and compositor coordination
 
-- Clear evidence identifying which rendering stages dominate each workload.
-- A decision on whether Blink-native segment lifecycle work is justified.
+- give viewport and predicted raster work priority during active scroll;
+- bound background observer/task work when semantics allow;
+- maintain virtual segment geometry in compositor-visible state;
+- quantify and prevent blanking/checkerboarding.
 
-## Phase 2 — Blink segment lifecycle
+## Phase 5 — geometry capsule experiment
 
-Goal: implement conservative engine-owned lifecycle management.
+Only after measurement:
 
-- Introduce internal segment metadata.
-- Add HOT/WARM/COLD transitions.
-- Coordinate style/layout/paint invalidation with segment state.
-- Materialize for geometry queries, focus, selection, search, accessibility, screenshot, print, and mutation as required.
-- Add anti-thrashing promotion policy.
+- retain block size, offset, anchors, text/search index, and style generation for a cold segment;
+- release selected derived layout/paint state;
+- materialize on geometry, focus, selection, find, accessibility, screenshot, print, and mutation demand;
+- prevent materialization thrash.
 
-Exit criteria:
+## Phase 6 — native history layer for pathological apps
 
-- Significant improvement on long-page benchmarks.
-- No known correctness regressions in the compatibility matrix.
+For applications where the framework itself remains the bottleneck:
 
-## Phase 3 — Scheduler and compositor coordination
+- browser-managed read-only history representation;
+- virtualized text/code/table rendering;
+- exact handoff to the live site for edit/regenerate/action operations;
+- explicit per-site integration rather than silent DOM deletion.
 
-Goal: make viewport responsiveness robust under main-thread pressure.
+## Phase 7 — release engineering
 
-- Predictive warm range based on scroll velocity/direction.
-- Prioritize near-future raster/layout work.
-- Reduce unnecessary background work during active scrolling where semantics allow.
-- Instrument compositor/main-thread contention.
-
-Exit criteria:
-
-- Stable fast scrolling without persistent checkerboarding/blank regions.
-- Improved p95/p99 interaction frame times under JavaScript load.
-
-## Phase 4 — Compact cold-state experiments
-
-Goal: reduce the retained memory cost of very large documents.
-
-- Measure retained layout/paint/accessibility state by segment.
-- Prototype geometry capsules.
-- Selectively discard derived rendering state.
-- Add precise materialization causes and telemetry.
-
-Exit criteria:
-
-- Material memory reduction on 1,000+ segment pages.
-- Acceptable cold-to-visible materialization latency.
-
-## Phase 5 — AI conversation optimization
-
-Goal: handle very long AI chat applications as a flagship workload without hard-coding the engine around a single website.
-
-- Build generic conversation-turn segmentation heuristics.
-- Add a site-adapter layer only where necessary.
-- Explore native historical reading surfaces for dormant conversation history.
-- Test live streaming responses while the user scrolls history.
-
-Exit criteria:
-
-- Long conversations remain responsive as history grows.
-- Active composer/streaming behavior stays correct.
-
-## Phase 6 — Productization
-
-- macOS/Windows distributable builds.
-- Long-page diagnostics UI.
-- Conservative default policy and experimental flags.
-- Crash/compatibility testing.
-- Upstreamability review of individual changes.
-- Release process and signed artifacts.
-
-## Explicitly deferred
-
-- Android/iOS browser productization.
-- General-purpose memory compression unrelated to long-page rendering.
-- UI/branding work before the rendering architecture proves value.
+- product branding and first-run experience;
+- signed/notarized macOS builds;
+- signed Windows installer;
+- updater and security patch cadence;
+- crash reporting and privacy review;
+- reproducible release manifest and SBOM.
