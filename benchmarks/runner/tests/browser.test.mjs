@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { isLoopbackUrl, parseWebSocketDebuggerUrl, selectPageTarget } from "../browser.mjs";
 import { resolveServedFile } from "../runner.mjs";
@@ -32,8 +34,8 @@ test("parseWebSocketDebuggerUrl validates the DevToolsActivePort endpoint", () =
 });
 
 test("fixture resolution stays within the configured root", () => {
-  const root = "/tmp/longview-fixture";
-  assert.equal(resolveServedFile(root, "index.html"), "/tmp/longview-fixture/index.html");
+  const root = path.join(os.tmpdir(), "longview-fixture");
+  assert.equal(resolveServedFile(root, "index.html"), path.resolve(root, "index.html"));
   assert.equal(resolveServedFile(root, "../secret"), null);
-  assert.equal(resolveServedFile(root, "/etc/passwd"), null);
+  assert.equal(resolveServedFile(root, path.resolve(root, "..", "outside.txt")), null);
 });
