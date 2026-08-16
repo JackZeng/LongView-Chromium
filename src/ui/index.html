@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; img-src 'self' data: https:; style-src 'self'; script-src 'self'">
+  <title>LongView Browser</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app">
+    <div class="tab-row">
+      <div id="tabs" class="tabs" role="tablist" aria-label="Tabs"></div>
+      <button id="new-tab" class="icon-button new-tab" title="New tab" aria-label="New tab">+</button>
+      <div class="window-spacer"></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="nav-group">
+        <button id="back" class="icon-button" title="Back" aria-label="Back">←</button>
+        <button id="forward" class="icon-button" title="Forward" aria-label="Forward">→</button>
+        <button id="reload" class="icon-button" title="Reload" aria-label="Reload">↻</button>
+        <button id="home" class="icon-button" title="Home" aria-label="Home">⌂</button>
+      </div>
+
+      <div class="address-shell">
+        <span id="security-indicator" class="security-indicator" title="Connection">●</span>
+        <input id="address" type="text" autocomplete="off" spellcheck="false" aria-label="Address and search">
+        <button id="bookmark" class="address-action" title="Bookmark this page" aria-label="Bookmark">☆</button>
+      </div>
+
+      <div class="longview-controls">
+        <button id="longview-toggle" class="longview-toggle" title="Enable or disable LongView for all pages">
+          <span class="status-dot"></span>
+          <span>LongView</span>
+        </button>
+        <select id="longview-mode" title="LongView compatibility mode" aria-label="LongView mode">
+          <option value="compatibility">Compatible</option>
+          <option value="balanced">Balanced</option>
+          <option value="aggressive">Aggressive</option>
+        </select>
+        <button id="metrics" class="metrics" title="No metrics yet">—</button>
+      </div>
+
+      <div class="utility-group">
+        <button id="history" class="icon-button" title="History" aria-label="History">◷</button>
+        <button id="settings" class="icon-button" title="Settings" aria-label="Settings">⚙</button>
+      </div>
+
+      <div id="find-bar" class="find-bar" hidden>
+        <input id="find-input" type="text" autocomplete="off" aria-label="Find in page" placeholder="Find in page">
+        <span id="find-result">0/0</span>
+        <button id="find-prev" title="Previous match">↑</button>
+        <button id="find-next" title="Next match">↓</button>
+        <button id="find-close" title="Close">×</button>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

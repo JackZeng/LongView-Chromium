@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:">
+  <title>LongView</title>
+  <link rel="stylesheet" href="internal.css">
+  <style>
+    .layout { display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 28px; margin-top: 34px; }
+    nav { align-self: start; position: sticky; top: 24px; display: grid; gap: 7px; }
+    nav button { text-align: left; border: 0; border-radius: 11px; padding: 11px 13px; background: transparent; }
+    nav button:hover, nav button.active { background: var(--accent-soft); color: var(--accent); }
+    .content { min-width: 0; }
+    .content-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 17px; }
+    .content-head h2 { margin: 0; font-size: 24px; letter-spacing: -.03em; }
+    .settings { display: grid; gap: 14px; }
+    .setting { display: grid; grid-template-columns: minmax(0,1fr) 220px; gap: 24px; align-items: center; padding: 18px; }
+    .setting h3 { margin: 0 0 5px; font-size: 14px; }
+    .setting p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .setting input[type="number"], .setting input[type="text"], .setting select { width: 100%; height: 38px; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; background: var(--bg); }
+    .switch { justify-self: end; width: 48px; height: 28px; }
+    .version { margin-top: 24px; padding: 18px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.65; }
+    .actions { display: flex; gap: 8px; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } nav { position: static; grid-template-columns: repeat(3,1fr); } .setting { grid-template-columns: 1fr; } .switch { justify-self: start; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="brand"><div class="logo">LV</div><div><h1>LongView Browser</h1><p>Long-page controls and local browser data</p></div></div>
+    <div class="layout">
+      <nav>
+        <button data-page="history">History</button>
+        <button data-page="bookmarks">Bookmarks</button>
+        <button data-page="settings">Settings</button>
+      </nav>
+      <section class="content">
+        <div class="content-head"><h2 id="title">Settings</h2><div id="header-actions" class="actions"></div></div>
+        <div id="content"></div>
+      </section>
+    </div>
+  </main>
+  <script src="library.js"></script>
+</body>
+</html>

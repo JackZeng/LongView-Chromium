@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src data:">
+  <title>LongView Conversation Benchmark</title>
+  <link rel="stylesheet" href="conversation.css">
+</head>
+<body>
+  <header class="benchmark-header">
+    <div><strong>LongView benchmark</strong><span id="status">Generating…</span></div>
+    <div class="controls">
+      <label>Turns <select id="turns"><option>100</option><option>500</option><option selected>1000</option><option>2000</option><option>5000</option></select></label>
+      <button id="regenerate">Regenerate</button>
+      <button id="run">Run scroll test</button>
+    </div>
+  </header>
+  <main id="conversation" class="conversation" aria-label="Synthetic conversation"></main>
+  <aside id="result" class="result" hidden><pre></pre></aside>
+  <script src="conversation.js"></script>
+</body>
+</html>

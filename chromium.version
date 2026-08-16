@@ -1,0 +1,9 @@
+{
+  "electron_version": "43.2.0",
+  "chromium_version": "150.0.7871.129",
+  "chromium_git_sha": "e69b30bba288603e514cffb4c79c359cac68e923",
+  "node_version_in_electron": "24.18.0",
+  "v8_version": "15.0.1240245",
+  "pinned_on": "2026-08-16",
+  "source": "https://releases.electronjs.org/release/v43.2.0"
+}

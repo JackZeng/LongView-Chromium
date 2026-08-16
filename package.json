@@ -1,0 +1,32 @@
+{
+  "name": "longview-chromium",
+  "productName": "LongView Browser",
+  "version": "0.1.0",
+  "description": "A Chromium-based desktop browser that keeps extremely long, dynamic pages responsive through HOT/WARM/COLD segment lifecycle management.",
+  "main": "src/main/index.cjs",
+  "type": "commonjs",
+  "private": true,
+  "license": "BSD-3-Clause",
+  "author": "LongView Chromium contributors",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "start:debug": "electron . --enable-logging --v=1",
+    "check:syntax": "node tools/check-syntax.cjs",
+    "test": "node --test test/*.test.cjs",
+    "check": "npm run check:syntax && npm test",
+    "benchmark:baseline": "electron . --benchmark --longview=off --turns=1000 --runs=3 --output=artifacts/baseline-1000.json",
+    "benchmark:longview": "electron . --benchmark --longview=balanced --turns=1000 --runs=3 --output=artifacts/longview-1000.json",
+    "benchmark:compare": "node tools/compare-results.cjs artifacts/baseline-1000.json artifacts/longview-1000.json artifacts/comparison-1000.md",
+    "package": "electron-packager . LongView --overwrite --prune=true --out=dist",
+    "package:mac-arm64": "electron-packager . LongView --platform=darwin --arch=arm64 --overwrite --prune=true --out=dist",
+    "package:mac-x64": "electron-packager . LongView --platform=darwin --arch=x64 --overwrite --prune=true --out=dist",
+    "package:win-x64": "electron-packager . LongView --platform=win32 --arch=x64 --overwrite --prune=true --out=dist"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.0.4",
+    "electron": "43.2.0"
+  }
+}

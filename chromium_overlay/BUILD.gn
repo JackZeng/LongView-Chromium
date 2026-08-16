@@ -1,0 +1,19 @@
+# LongView native policy kernel. This directory is copied to //longview in a
+# pinned Chromium checkout by tools/install-overlay.py.
+
+import("//testing/test.gni")
+
+source_set("longview_policy") {
+  sources = [
+    "common/long_page_policy.cc",
+    "common/long_page_policy.h",
+  ]
+}
+
+test("longview_policy_tests") {
+  sources = [ "common/tests/long_page_policy_unittest.cc" ]
+  deps = [
+    ":longview_policy",
+    "//testing/gtest",
+  ]
+}
