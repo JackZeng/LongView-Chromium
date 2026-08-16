@@ -1,41 +1,35 @@
-# ADR 0002: Extension-first browser MVP before Blink-native eviction
+# ADR 0002: Use a native Chromium build with an extension-first lifecycle prototype
 
-- Status: accepted
-- Date: 2026-08-16
+## Status
+
+Accepted for v0.1–v0.2.
 
 ## Context
 
-The final LongView vision requires browser-engine control over off-screen rendering state. Immediately modifying LayoutNG, display locking, scheduler, compositor, accessibility, and browser product code would create a large unverified fork before the dominant bottleneck and compatibility semantics are measured.
-
-Chromium already exposes `content-visibility`, intrinsic-size containment, browser extension loading, performance observers, and ordinary rendering behavior sufficient to validate a large part of the working-set hypothesis on real pages.
+Deep Blink changes are expensive and compatibility-sensitive. The project needs a runnable browser, deterministic workloads, and policy evidence before it can safely change LayoutNG, paint, accessibility, or compositor behavior.
 
 ## Decision
 
-The first working browser release will:
-
-1. build a pinned Chromium revision;
-2. load a repository-owned Manifest V3 LongView runtime;
-3. implement segmentation, prediction, lifecycle, compatibility wakeups, diagnostics, and benchmarks there;
-4. maintain an equivalent dependency-free C++ lifecycle specification;
-5. move mechanisms into Blink only after measurements identify costs the runtime layer cannot remove.
+Build the browser from pinned Chromium and load a LongView Manifest V3 runtime into that native browser. Mirror the lifecycle policy in dependency-free C++ and install it as an independent `//longview` GN target.
 
 ## Consequences
 
-### Positive
+Positive:
 
-- A functional browser can be tested early on target pages.
-- Baseline and LongView can use the same Chromium binary.
-- Policy changes are fast to iterate and easy to disable.
-- Compatibility failures are observable before deep engine work.
-- Native patches can be justified by evidence rather than intuition.
+- real native Chromium executable;
+- fast policy iteration;
+- baseline and LongView use the same browser binary;
+- site adapters and product controls can be validated early;
+- the C++ model can become a parity oracle for Blink work.
 
-### Negative
+Limitations:
 
-- The runtime cannot release site DOM, V8 heap, or every retained layout/accessibility structure.
-- It depends on discoverable segment boundaries.
-- Some geometry/materialization behavior remains controlled by existing Chromium primitives.
-- Production packaging initially launches Chromium with a bundled runtime rather than a fully integrated component extension.
+- retains DOM and most layout/accessibility state;
+- cannot independently own compositor scrolling;
+- cannot prove geometry-capsule feasibility;
+- real LongView extension runs require headed Chromium (or a virtual display), not pure headless mode;
+- extension injection can add its own main-thread cost.
 
-## Revisit condition
+## Revisit
 
-Begin Blink-native implementation after the evidence campaign shows a repeatable remaining cost that scales with total page complexity and the compatibility matrix defines when authoritative state must be restored.
+After Phase 2 evidence and Phase 3 observability tests are available.

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LongView Engine",
   "short_name": "LongView",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Keeps extremely long pages responsive by managing visible and off-screen content as a working set.",
   "minimum_chrome_version": "120",
   "permissions": [

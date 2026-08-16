@@ -1,72 +1,75 @@
-# LongView Chromium roadmap
+# Roadmap
 
-## Phase 0 — foundation — complete
+## Phase 0 — reproducible baseline
 
-- establish repository and engineering principles;
-- pin an exact stable Chromium revision;
-- define benchmark and compatibility contracts;
-- create build profiles and cross-platform bootstrap tooling.
+- [x] pin Chromium;
+- [x] document checkout/build workflow;
+- [x] deterministic long-conversation fixture;
+- [x] source validation across Linux, macOS, and Windows;
+- [ ] record full native macOS/Windows baseline evidence on controlled hardware.
 
-## Phase 1 — working browser MVP — complete in v0.1
+## Phase 1 — runnable working-set prototype
 
-- load LongView into a Chromium build;
-- discover site-specific and generic long-page segments;
-- implement HOT/WARM/COLD/PINNED lifecycle;
-- predict scroll direction and velocity;
-- preserve focus, selection, find, geometry, and dynamic-content behavior;
-- expose controls and diagnostics;
-- provide developer packaging.
+- [x] native Chromium launch path;
+- [x] Manifest V3 runtime;
+- [x] explicit and site-specific adapters;
+- [x] HOT/WARM/COLD/PINNED lifecycle;
+- [x] focus/selection/find/print materialization hooks;
+- [x] diagnostics and controls;
+- [x] deterministic benchmark automation.
 
-## Phase 2 — evidence campaign — next
+## Phase 2 — evidence and policy hardening
 
-- run baseline and LongView on representative Apple Silicon Macs and Windows PCs;
-- collect 100/500/1000/2000-turn scaling curves;
-- separate main-thread, style, layout, paint, raster, GC, memory, and accessibility costs;
-- tune segment granularity, intrinsic-size policy, warm distance, and hysteresis;
-- publish reproducible result bundles and Perfetto traces.
+- [x] dependency-free CDP metrics/trace driver;
+- [x] 100/500/1000/2000 scale campaign;
+- [x] scaling exponent analysis;
+- [x] correctness and regression gates;
+- [x] conservative native eligibility policy;
+- [x] demotion hysteresis and anti-thrashing;
+- [x] installable Chromium policy target;
+- [x] disabled-by-default Blink feature candidate;
+- [ ] collect controlled macOS/Windows evidence artifacts.
 
-Exit criterion: demonstrate where v0.1 changes the scaling curve and identify the largest remaining total-document cost.
+## Phase 3 — native observability
 
-## Phase 3 — Blink-native lifecycle
+- [ ] compile patch 0001 on the exact pin across macOS and Windows;
+- [ ] document-scoped LongPageController;
+- [ ] conservative candidate discovery only;
+- [ ] trace/UMA for counts, transitions, eligibility, and faults;
+- [ ] native web tests for geometry, focus, selection, anchors, accessibility, screenshot, print, and mutation;
+- [ ] no rendering behavior change in the first observability patch.
 
-- add engine-owned `LongPageSegment` eligibility and lifecycle behind a disabled-by-default feature flag;
-- move materialization reasons and anti-thrashing policy into Blink;
-- add UMA/tracing diagnostics for transitions and forced materialization;
-- integrate style/layout/paint invalidation boundaries conservatively;
-- add web tests for all compatibility operations.
+## Phase 4 — display-lock backed cold experiment
 
-Exit criterion: native prototype beats the extension runtime on retained work without breaking the compatibility suite.
+- [ ] connect eligible segments to existing Blink display-lock/content-visibility state;
+- [ ] materialize before observable operations;
+- [ ] preserve scroll geometry and identity;
+- [ ] pin thrashing segments;
+- [ ] measure style/layout/paint/raster and blanking;
+- [ ] default feature remains off.
 
-## Phase 4 — scheduler and compositor coordination
+## Phase 5 — scheduler/compositor coordination
 
-- give viewport and predicted raster work priority during active scroll;
-- bound background observer/task work when semantics allow;
-- maintain virtual segment geometry in compositor-visible state;
-- quantify and prevent blanking/checkerboarding.
+Only if traces prove it is needed:
 
-## Phase 5 — geometry capsule experiment
+- [ ] velocity-aware warm range owned jointly with scheduler/compositor;
+- [ ] raster priority for predicted viewport;
+- [ ] cold observer and background work deprioritization;
+- [ ] checkerboard and input-latency guardrails.
 
-Only after measurement:
+## Phase 6 — compact retained state
 
-- retain block size, offset, anchors, text/search index, and style generation for a cold segment;
-- release selected derived layout/paint state;
-- materialize on geometry, focus, selection, find, accessibility, screenshot, print, and mutation demand;
-- prevent materialization thrash.
+Only if retained layout state remains a measured limit:
 
-## Phase 6 — native history layer for pathological apps
+- [ ] geometry capsule prototype;
+- [ ] text/anchor/find index;
+- [ ] compact accessibility representation;
+- [ ] compositor placeholder geometry;
+- [ ] memory scaling evidence.
 
-For applications where the framework itself remains the bottleneck:
+## Phase 7 — product release
 
-- browser-managed read-only history representation;
-- virtualized text/code/table rendering;
-- exact handoff to the live site for edit/regenerate/action operations;
-- explicit per-site integration rather than silent DOM deletion.
-
-## Phase 7 — release engineering
-
-- product branding and first-run experience;
-- signed/notarized macOS builds;
-- signed Windows installer;
-- updater and security patch cadence;
-- crash reporting and privacy review;
-- reproducible release manifest and SBOM.
+- [ ] signed/notarized macOS and Windows packages;
+- [ ] update channel following supported Chromium security versions;
+- [ ] crash reporting, rollback, privacy, and accessibility review;
+- [ ] public benchmark corpus and evidence dashboard.

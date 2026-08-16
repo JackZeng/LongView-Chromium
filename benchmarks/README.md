@@ -1,60 +1,34 @@
-# LongView benchmarks
+# Benchmarks
 
-The benchmark suite produces deterministic long-page workloads without depending on a live AI product or network service.
-
-## Conversation fixture
-
-`fixtures/conversation` generates 10–5000 synthetic user/assistant turns. A turn can include paragraphs, code blocks, tables, image placeholders and toolbars. Optional stress modes add:
-
-- continuous append/streaming;
-- IntersectionObserver and ResizeObserver load;
-- bounded JavaScript long tasks;
-- distant DOM mutations;
-- focus, selection, anchor, `scrollIntoView` and geometry correctness probes.
-
-Open it manually with any static HTTP server:
-
-```bash
-python3 -m http.server 8000 --directory benchmarks/fixtures/conversation
-```
-
-Then visit:
+LongView's deterministic benchmark suite separates one-run performance from scaling behavior.
 
 ```text
-http://127.0.0.1:8000/?turns=1000&stream=1&stress=1
+fixtures/conversation/       ChatGPT-like long conversation with code, tables, images,
+                             streaming, observers, long tasks, and distant mutations
+runner/runner.mjs            one baseline or LongView measurement
+runner/campaign.mjs          baseline + LongView scale matrix
+runner/gate.mjs              correctness/regression evaluation
+runner/cdp.mjs               CDP metrics and trace stream capture
+expectations/                JSON schemas
 ```
 
-## Automated runner
+The runner is dependency-free on Node.js 22+ and always measures the executable passed with `--executable`.
 
-Install the single runner dependency:
+One run:
 
 ```bash
-cd benchmarks/runner
-npm install
+node runner.mjs --executable /path/to/chromium --turns 1000 --runs 5 --longview --stress
 ```
 
-Run baseline and LongView using the same executable, viewport, fixture seed and duration:
+Full evidence campaign:
 
 ```bash
-node benchmarks/runner/runner.mjs \
+node campaign.mjs \
   --executable /path/to/chromium \
-  --turns 1000 --runs 5 --duration 9000 --stress \
-  --output benchmark-results/baseline.json
-
-xvfb-run -a node benchmarks/runner/runner.mjs \
-  --executable /path/to/chromium \
-  --turns 1000 --runs 5 --duration 9000 --stress --longview \
-  --output benchmark-results/longview.json
-
-node benchmarks/runner/compare.mjs \
-  benchmark-results/baseline.json \
-  benchmark-results/longview.json
+  --turns 100,500,1000,2000 \
+  --runs 5 \
+  --stress --stream --trace \
+  --outputDir ../../benchmark-results/machine-date
 ```
 
-LongView mode deliberately uses a headed browser because extension behavior and compositor timing should match a normal desktop session. On Linux without a display, wrap the command in `xvfb-run`.
-
-## Measurement contract
-
-Each run captures frame p50/p95/p99/max, estimated refresh interval, dropped-frame ratio, long-task count/time, layout shift, DOM scale, JS heap when available, LongView state counts and correctness results. Initialization work is excluded from the measured scroll interval.
-
-See `docs/BENCHMARKS.md` for experimental controls and reporting requirements.
+Generated traces can be opened in Perfetto. Do not commit large traces to this repository.

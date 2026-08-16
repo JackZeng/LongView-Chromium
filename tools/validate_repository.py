@@ -7,10 +7,15 @@ import sys
 import tomllib
 from pathlib import Path
 
+from generate_source_manifest import build_manifest
 from validate_extension import main as validate_extension
 
-
 REPO = Path(__file__).resolve().parents[1]
+FORBIDDEN_RELEASE_PATHS = [
+    ".longview-bootstrap", ".phase2-patch",
+    ".github/workflows/promote-native-source.yml",
+    ".github/workflows/promote-phase2.yml",
+]
 
 
 def fail(message: str) -> None:
@@ -29,7 +34,6 @@ def validate_versions() -> str:
     version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         fail(f"VERSION is not semantic x.y.z: {version!r}")
-
     package = load_json(REPO / "package.json")
     manifest = load_json(REPO / "product/extension/manifest.json")
     pyproject = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
@@ -41,7 +45,6 @@ def validate_versions() -> str:
     for source, value in versions.items():
         if value != version:
             fail(f"{source} version {value!r} does not match VERSION {version!r}")
-
     namespace = (REPO / "product/extension/content/00-namespace.js").read_text(encoding="utf-8")
     if f'version: "{version}"' not in namespace:
         fail("content-script namespace version does not match VERSION")
@@ -61,59 +64,67 @@ def validate_chromium_pin() -> None:
         fail("chromium.version source must point to the pinned tag")
 
 
+def ignored(path: Path) -> bool:
+    return any(part in {"node_modules", "build", ".longview", "benchmark-results", "__pycache__"} for part in path.parts)
+
+
 def validate_json_files() -> None:
     for path in sorted(REPO.rglob("*.json")):
-        if any(part in {"node_modules", "build", ".longview"} for part in path.parts):
-            continue
-        load_json(path)
+        if not ignored(path):
+            load_json(path)
 
 
 def validate_html_assets() -> None:
     for html in sorted(REPO.rglob("*.html")):
-        if any(part in {"node_modules", "build", ".longview"} for part in html.parts):
+        if ignored(html):
             continue
-        text = html.read_text(encoding="utf-8")
-        for match in re.finditer(r'(?:src|href)="([^"#?]+)"', text):
-            reference = match.group(1)
+        for reference in re.findall(r'(?:src|href)="([^"#?]+)"', html.read_text(encoding="utf-8")):
             if reference.startswith(("http://", "https://", "data:", "chrome-extension://")):
                 continue
-            target = (html.parent / reference).resolve()
-            if not target.is_file():
+            if not (html.parent / reference).resolve().is_file():
                 fail(f"{html.relative_to(REPO)} references missing asset {reference}")
 
 
 def validate_markdown_links() -> None:
     pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     for markdown in sorted(REPO.rglob("*.md")):
-        if any(part in {"node_modules", "build", ".longview"} for part in markdown.parts):
+        if ignored(markdown):
             continue
-        text = markdown.read_text(encoding="utf-8")
-        for reference in pattern.findall(text):
+        for reference in pattern.findall(markdown.read_text(encoding="utf-8")):
             reference = reference.strip().split("#", 1)[0]
             if not reference or reference.startswith(("http://", "https://", "mailto:")):
                 continue
-            target = (markdown.parent / reference).resolve()
-            if not target.exists():
+            if not (markdown.parent / reference).resolve().exists():
                 fail(f"{markdown.relative_to(REPO)} links to missing path {reference}")
 
 
 def validate_required_layout() -> None:
     required = [
-        "README.md",
-        "chromium.version",
-        "configs/gn/baseline.gn",
-        "configs/gn/longview-dev.gn",
-        "configs/gn/longview-release.gn",
-        "product/extension/manifest.json",
-        "benchmarks/fixtures/conversation/index.html",
-        "benchmarks/runner/runner.mjs",
-        "src/native/CMakeLists.txt",
-        "docs/IMPLEMENTATION_STATUS.md",
+        "README.md", "chromium.version", "chromium_overlay/BUILD.gn",
+        "chromium_overlay/blink_feature_probe.cc", "configs/gn/baseline.gn",
+        "configs/gn/longview-dev.gn", "configs/gn/longview-release.gn",
+        "product/extension/manifest.json", "benchmarks/fixtures/conversation/index.html",
+        "benchmarks/runner/runner.mjs", "benchmarks/runner/campaign.mjs",
+        "benchmarks/runner/cdp.mjs", "src/native/CMakeLists.txt",
+        "src/native/include/longview/policy_engine.h", "tools/generate_source_manifest.py",
+        "tools/longview_tools/blink_patch.py", "tools/longview_tools/overlay.py",
+        "docs/EVIDENCE_CAMPAIGN.md", "docs/BLINK_NATIVE_PHASE3.md",
         ".github/workflows/ci.yml",
     ]
     missing = [relative for relative in required if not (REPO / relative).is_file()]
     if missing:
         fail(f"required files are missing: {', '.join(missing)}")
+    forbidden = [relative for relative in FORBIDDEN_RELEASE_PATHS if (REPO / relative).exists()]
+    if forbidden:
+        fail(f"transport/bootstrap artifacts remain: {', '.join(forbidden)}")
+
+
+def validate_manifest() -> None:
+    path = REPO / "SOURCE_MANIFEST.sha256"
+    if not path.is_file():
+        fail("SOURCE_MANIFEST.sha256 is missing")
+    if path.read_text(encoding="utf-8") != build_manifest(REPO):
+        fail("SOURCE_MANIFEST.sha256 is stale; run tools/generate_source_manifest.py")
 
 
 def main() -> int:
@@ -124,6 +135,7 @@ def main() -> int:
     validate_html_assets()
     validate_markdown_links()
     validate_extension()
+    validate_manifest()
     print(f"Validated LongView Chromium repository {version}")
     return 0
 

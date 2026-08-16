@@ -1,69 +1,67 @@
-# Development guide
+# Development workflow
 
-## Branch and commit policy
+## Branches
 
-Use small, measurable changes. Recommended branches:
+Use short-lived branches from `main`:
 
 ```text
 agent/<description>
-experiment/<mechanism>
-fix/<compatibility-regression>
 ```
 
-A performance change should not mix unrelated product UI work. Commit messages should state the mechanism, not an unverified outcome.
+Keep benchmark/tooling changes separate from deep Chromium patches when possible.
 
-## Required local checks
+## Required validation
+
+Before opening a PR:
 
 ```bash
-python3 tools/validate_extension.py
+python3 tools/generate_source_manifest.py
+python3 tools/validate_repository.py
 npm run check:js
 npm test
 PYTHONPATH=tools python3 -m unittest discover -s tools/tests -v
-cmake -S src/native -B build/native
-cmake --build build/native
+python3 -m compileall -q tools
+cmake -S src/native -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native --parallel 2
 ctest --test-dir build/native --output-on-failure
 ```
 
-When a usable Chromium executable is available without blocking enterprise policy:
+C++ development builds should also pass strict warnings:
 
 ```bash
-xvfb-run -a node tools/smoke_chromium.mjs --executable /path/to/chromium --turns 200
+cmake -S src/native -B build/native-strict -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror"
+cmake --build build/native-strict --parallel 2
+ctest --test-dir build/native-strict --output-on-failure
 ```
 
-On macOS and Windows, run the smoke page in a normal visible browser as well, because compositor behavior, refresh rate, and input differ from virtual/headless environments.
+## Performance changes
 
-## Extension architecture rules
+A performance PR must identify:
 
-- `shared/core.js` contains deterministic policy functions and must load first.
-- content scripts load in numeric order.
-- `50-bootstrap.js` must load last.
-- no inline scripts or event handlers; Manifest V3 CSP is validated.
-- no remote code.
-- no site DOM deletion.
-- every injected inline property must be restorable.
-- scrolling must not call `getBoundingClientRect()` on every segment every frame.
-- new site adapters require a generic fallback and a fixture/test.
+- exact Chromium revision;
+- LongView commit;
+- fixture and scale matrix;
+- run count and warm-up policy;
+- OS, CPU, RAM, GPU, display refresh, and power mode;
+- before/after evidence;
+- trace paths or uploaded artifacts;
+- compatibility checks.
 
-## Performance experiment template
+One attractive trace is not evidence. Prefer repeated runs and report both medians and tail percentiles.
 
-Before implementation, write down:
+## Chromium patches
 
-1. suspected bottleneck;
-2. mechanism;
-3. expected metric change;
-4. fixture and scale;
-5. compatibility risk;
-6. rollback condition.
+Upstream-file modifications live under `patches/`. The install tool applies them to the pinned checkout. Each patch must include:
 
-After implementation, attach raw results and describe negative findings as well as wins.
+- a narrow purpose;
+- exact expected pin;
+- tests or a compile probe;
+- explicit non-goals;
+- rollback notes.
 
-## Native migration rules
+Do not silently edit the user's Chromium checkout outside the installer. The installer records metadata in the checkout.
 
-`src/native` is an executable policy specification, not a parallel permanent implementation. When policy enters Blink:
+## Source integrity
 
-- preserve unit semantics;
-- add Chromium unit/web tests;
-- put behavior behind a disabled-by-default feature;
-- add trace events for eligibility, transition, forced materialization, and rejection;
-- keep the patch series small and rebasing-friendly;
-- do not serialize/remove DOM until identity and API semantics are explicitly solved.
+`SOURCE_MANIFEST.sha256` covers normal source files. `.git`, generated outputs, manifest itself, and benchmark results are excluded. The release branch must not contain encoded source carriers or source-promotion workflows.

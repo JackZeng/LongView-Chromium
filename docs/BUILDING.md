@@ -1,109 +1,141 @@
-# Building LongView Chromium
+# Building and running
 
-LongView builds the ordinary Chromium `chrome` target at an exact upstream commit, then launches it with the LongView runtime from this repository. This keeps baseline and variant measurements on the same engine revision.
+## Resource planning
 
-## Pinned baseline
+A Chromium checkout and development build can exceed 100 GiB. For a comfortable workspace, plan for:
 
-`chromium.version` is the source of truth:
+```text
+free disk       120–160 GiB
+RAM             16 GiB minimum, 32 GiB preferred
+CPU             8 logical cores or more preferred
+initial fetch   tens of GiB
+```
 
-- version: `151.0.7922.77`;
-- tag: `refs/tags/151.0.7922.77`;
-- commit: `ff37cfca210138f2a40b843b4a8195ab7e4fc7ff`.
-
-Do not silently substitute tip-of-tree when publishing performance numbers.
-
-## Common capacity requirements
-
-Chromium's checkout and build are large. Plan for:
-
-- 64-bit host;
-- 16 GB RAM minimum, with 32 GB preferable;
-- 120 GB or more free storage;
-- SSD storage;
-- a path without spaces;
-- a stable connection for the initial checkout and DEPS download.
-
-`python3 tools/longview.py doctor` verifies the local tools it can inspect and warns when storage is low.
-
-## macOS
-
-Install Xcode and its command-line tools. Accept the Xcode license and make sure the active developer directory points to the intended Xcode installation.
+## 1. Diagnose the machine
 
 ```bash
-xcode-select --install
+python3 tools/longview.py doctor
+```
+
+The command reports required tools and platform-specific caveats. `fetch` also runs this preflight and stops before downloading Chromium when a required tool is missing.
+
+## 2. Fetch pinned Chromium
+
+```bash
 python3 tools/longview.py fetch
+```
+
+The default workspace is a sibling directory named `.longview-chromium`. Override it:
+
+```bash
+python3 tools/longview.py --workspace /Volumes/Build/LongView fetch
+```
+
+The checkout is pinned to `chromium.version`. A detached HEAD is intentional.
+
+## 3. Install the LongView native overlay
+
+```bash
+python3 tools/longview.py install-overlay
+```
+
+The overlay is copied to:
+
+```text
+<workspace>/src/longview/
+```
+
+It provides an independent Chromium GN target:
+
+```bash
+python3 tools/longview.py build --target //longview:segment_policy_test
+```
+
+## 4. Install the disabled Blink feature candidate
+
+```bash
+python3 tools/longview.py install-blink-observability
+```
+
+The patch installer verifies the exact Chromium pin and refuses to apply a patch on a dirty checkout unless `--force` is supplied. The feature stays disabled by default.
+
+Build the probe:
+
+```bash
+python3 tools/longview.py build --target //longview:blink_feature_probe
+```
+
+## 5. Build Chromium
+
+Development build:
+
+```bash
 python3 tools/longview.py build --profile longview-dev
+```
+
+Release-oriented build:
+
+```bash
+python3 tools/longview.py build --profile longview-release
+```
+
+Baseline build uses a separate output directory and no extension at runtime:
+
+```bash
+python3 tools/longview.py build --profile baseline
+```
+
+A full Chromium build has not been completed unless `autoninja` reaches the requested target successfully. Creating GN files is not a successful build.
+
+## 6. Run
+
+LongView:
+
+```bash
 python3 tools/longview.py run https://chatgpt.com/
 ```
 
-The expected browser binary is:
-
-```text
-.longview/src/out/LongView/Chromium.app/Contents/MacOS/Chromium
-```
-
-## Windows
-
-Use 64-bit Windows 10 or newer and Visual Studio 2022 with:
-
-- Desktop development with C++;
-- Windows SDK;
-- MFC/ATL support.
-
-Run from a Developer Command Prompt or PowerShell environment that can discover Git, Python, and Visual Studio. Chromium's Clang toolchain is downloaded by its hooks, while Visual Studio supplies platform headers, libraries, and tools.
-
-```powershell
-py tools\longview.py fetch
-py tools\longview.py build --profile longview-dev
-py tools\longview.py run https://chatgpt.com/
-```
-
-The expected browser binary is:
-
-```text
-.longview\src\out\LongView\chrome.exe
-```
-
-## Linux
-
-On Ubuntu/Debian, after the checkout exists, Chromium's own dependency helper may be used:
+Baseline:
 
 ```bash
-.longview/src/build/install-build-deps.sh
-python3 tools/longview.py sync
-python3 tools/longview.py build --profile longview-dev
+python3 tools/longview.py run --baseline https://chatgpt.com/
 ```
 
-The expected browser binary is:
+Both commands use the same Chromium executable. LongView mode loads only `product/extension/`.
 
-```text
-.longview/src/out/LongView/chrome
+## 7. Run the evidence matrix
+
+```bash
+python3 tools/longview.py evidence \
+  --turns 100,500,1000,2000 \
+  --runs 5 \
+  --duration 9000 \
+  --stress \
+  --stream \
+  --trace \
+  --output-dir benchmark-results/$(hostname)-$(date +%F)
 ```
 
-Linux is useful for CI and performance infrastructure. Initial user-facing release work targets macOS and Windows.
+`--trace` captures traces for the largest scale. Use `--trace-all` only when storage allows it. For publishable macOS/Windows evidence, run in a real desktop session. Linux automation may use `xvfb-run`; do not force real-extension runs into Chromium headless mode.
 
-## GN profiles
+## 8. Package
 
-### `baseline.gn`
+```bash
+python3 tools/longview.py package --profile longview-release
+```
 
-Non-component, release-like, symbol-free build intended for clean comparison.
+Unsigned output is written under `dist/`. Public distribution requires platform signing and, on macOS, notarization.
 
-### `longview-dev.gn`
+## Platform notes
 
-Release-mode component build with limited symbols. It links and iterates faster.
+### macOS
 
-### `longview-release.gn`
+Install Xcode and accept its license. Apple Silicon and Intel builds require matching GN CPU configuration and should be benchmarked separately.
 
-Non-component release-like LongView development distribution. It is not an official Google Chrome build.
+### Windows
 
-## Reproducibility rule
+Use a normal local path with adequate space. Developer Mode or an elevated shell may be required for Chromium's link/symlink workflow. Visual Studio toolchain requirements follow upstream Chromium documentation.
 
-A benchmark report is valid only when it records:
+### Linux
 
-- Chromium SHA;
-- LongView repository SHA;
-- GN arguments;
-- OS, CPU, RAM, GPU, display refresh rate, and power mode;
-- fixture parameters;
-- warmup/run count;
-- exact launch flags.
+Linux is useful for CI and synthetic benchmarks. It is not a substitute for macOS/Windows product measurements. Sandbox errors in containers must not be hidden with `--no-sandbox` in production instructions.

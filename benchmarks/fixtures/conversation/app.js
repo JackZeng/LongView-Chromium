@@ -1,262 +1,279 @@
-(function benchmarkFixture() {
-  "use strict";
+const params = new URLSearchParams(location.search);
+const turns = Math.min(5000, Math.max(10, Number(params.get("turns") || 500)));
+const stream = params.get("stream") === "1";
+const stress = params.get("stress") === "1";
+const runDuration = Math.max(1000, Number(params.get("duration") || 7000));
+const seed = Number(params.get("seed") || 42);
 
-  const params = new URLSearchParams(location.search);
-  const config = Object.freeze({
-    turns: Math.min(5000, Math.max(10, Number(params.get("turns")) || 500)),
-    seed: Number(params.get("seed")) || 42,
-    code: params.get("code") !== "0",
-    tables: params.get("tables") !== "0",
-    images: params.get("images") !== "0",
-    stream: params.get("stream") === "1",
-    stress: params.get("stress") === "1",
-    autoRun: params.get("autorun") === "1",
-    durationMs: Math.max(1000, Number(params.get("duration")) || 9000)
+const conversation = document.getElementById("conversation");
+const stats = document.getElementById("stats");
+const runButton = document.getElementById("run");
+const targetSelect = document.getElementById("target");
+
+function mulberry32(value) {
+  return () => {
+    value |= 0;
+    value = value + 0x6D2B79F5 | 0;
+    let result = Math.imul(value ^ value >>> 15, 1 | value);
+    result = result + Math.imul(result ^ result >>> 7, 61 | result) ^ result;
+    return ((result ^ result >>> 14) >>> 0) / 4294967296;
+  };
+}
+const random = mulberry32(seed);
+
+function paragraph(index, extra = "") {
+  const words = [
+    "layout", "paint", "raster", "compositor", "segment", "memory", "selection",
+    "accessibility", "observer", "streaming", "geometry", "scheduler", "viewport",
+    "interaction", "compatibility", "materialization", "anchor", "mutation"
+  ];
+  const length = 26 + Math.floor(random() * 30);
+  const generated = Array.from({ length }, (_, offset) => words[(index * 7 + offset * 3) % words.length]).join(" ");
+  return `Turn ${index}: ${generated}. ${extra}`;
+}
+
+function table(index) {
+  const rows = Array.from({ length: 5 }, (_, row) =>
+    `<tr><td>${index}.${row}</td><td>${(index + row) * 17}</td><td>${paragraph(row).slice(0, 55)}</td></tr>`
+  ).join("");
+  return `<table><thead><tr><th>Step</th><th>Value</th><th>Observation</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function code(index) {
+  return `<pre><code>function segment${index}(viewport) {
+  const hot = viewport.start - ${index % 13};
+  const warm = viewport.end + ${(index % 7) + 2};
+  return { hot, warm, cold: hot &gt; warm };
+}</code></pre>`;
+}
+
+function fakeImage(index) {
+  return `<div class="fake-image" role="img" aria-label="Synthetic benchmark image ${index}">
+    <span>${index}</span><i></i><b></b>
+  </div>`;
+}
+
+function turnMarkup(index) {
+  const role = index % 2 === 0 ? "assistant" : "user";
+  const extras = [];
+  if (index % 11 === 0) extras.push(code(index));
+  if (index % 17 === 0) extras.push(table(index));
+  if (index % 23 === 0) extras.push(fakeImage(index));
+  return `<article class="turn ${role}" id="turn-${index}" data-longview-segment-root="true" data-turn="${index}" tabindex="-1">
+    <div class="avatar" aria-hidden="true">${role === "assistant" ? "L" : "U"}</div>
+    <div class="content">
+      <header><strong>${role === "assistant" ? "LongView Assistant" : "Benchmark User"}</strong><a href="#turn-${index}">#${index}</a></header>
+      <p>${paragraph(index, "This deterministic fixture intentionally retains a large live document.")}</p>
+      <p>${paragraph(index + 1)}</p>
+      ${extras.join("")}
+      <div class="toolbar"><button type="button">Copy</button><button type="button">Retry</button><button type="button">More</button></div>
+    </div>
+  </article>`;
+}
+
+function render() {
+  const fragments = [];
+  for (let index = 0; index < turns; index += 1) fragments.push(turnMarkup(index));
+  conversation.innerHTML = fragments.join("");
+  targetSelect.innerHTML = [0, Math.floor(turns / 4), Math.floor(turns / 2), turns - 1]
+    .map((value) => `<option value="turn-${value}">Turn ${value}</option>`)
+    .join("");
+  stats.textContent = `${turns} turns · ${document.getElementsByTagName("*").length.toLocaleString()} DOM nodes`;
+}
+
+const longTasks = [];
+const frames = [];
+const observerCounts = { intersection: 0, resize: 0 };
+let frameLoopActive = true;
+let lastFrame = performance.now();
+function frameLoop(now) {
+  if (frameLoopActive) frames.push(now - lastFrame);
+  lastFrame = now;
+  requestAnimationFrame(frameLoop);
+}
+requestAnimationFrame(frameLoop);
+
+if ("PerformanceObserver" in window) {
+  const observer = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) longTasks.push({ start: entry.startTime, duration: entry.duration });
   });
+  try { observer.observe({ entryTypes: ["longtask"] }); } catch {}
+}
 
-  const feed = document.getElementById("feed");
-  const result = document.getElementById("result");
-  const summary = document.getElementById("summary");
-  const frameDeltas = [];
-  const longTasks = [];
-  const layoutShifts = [];
-  let lastFrame = performance.now();
-  let running = false;
-  let streamTimer = 0;
-  let stressTimer = 0;
+const intersectionObserver = new IntersectionObserver((entries) => {
+  observerCounts.intersection += entries.length;
+}, { rootMargin: "600px 0px" });
 
-  function mulberry32(seed) {
-    return function random() {
-      let value = seed += 0x6D2B79F5;
-      value = Math.imul(value ^ value >>> 15, value | 1);
-      value ^= value + Math.imul(value ^ value >>> 7, value | 61);
-      return ((value ^ value >>> 14) >>> 0) / 4294967296;
-    };
+const resizeObserver = new ResizeObserver((entries) => {
+  observerCounts.resize += entries.length;
+});
+
+function attachObservers() {
+  const nodes = [...document.querySelectorAll(".turn")];
+  for (let index = 0; index < nodes.length; index += Math.max(1, Math.floor(nodes.length / 100))) {
+    intersectionObserver.observe(nodes[index]);
+    resizeObserver.observe(nodes[index]);
   }
+}
 
-  const random = mulberry32(config.seed);
-  const words = "browser rendering viewport segment memory layout paint raster compositor scrolling message model system performance dynamic content observer geometry interaction latency response context reasoning token benchmark deterministic".split(" ");
+function startStress() {
+  if (!stress) return;
+  setInterval(() => {
+    const target = document.querySelector(`.turn[data-turn="${Math.floor(random() * turns)}"] p`);
+    if (target) target.dataset.tick = String(performance.now());
+  }, 240);
+  setInterval(() => {
+    const start = performance.now();
+    while (performance.now() - start < 7) Math.sqrt(random() * 100000);
+  }, 700);
+}
 
-  function sentence(wordCount = 22) {
-    const output = [];
-    for (let index = 0; index < wordCount; index += 1) output.push(words[Math.floor(random() * words.length)]);
-    const text = output.join(" ");
-    return text[0].toUpperCase() + text.slice(1) + ".";
+function startStream() {
+  if (!stream) return;
+  const last = document.querySelector(".turn:last-child .content");
+  if (!last) return;
+  const output = document.createElement("p");
+  output.className = "streaming-output";
+  last.append(output);
+  const tokens = paragraph(turns + 10).split(" ");
+  let index = 0;
+  const timer = setInterval(() => {
+    output.append(`${tokens[index++ % tokens.length]} `);
+    if (index > 320) clearInterval(timer);
+  }, 25);
+}
+
+function quantile(values, value) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * value) - 1))];
+}
+
+function collectLongView() {
+  const states = {};
+  let active = 0;
+  for (const node of document.querySelectorAll('[data-longview-segment="true"]')) {
+    const state = node.dataset.longviewState || "unknown";
+    states[state] = (states[state] || 0) + 1;
+    active += 1;
   }
+  return { active, ...states };
+}
 
-  function codeBlock(index) {
-    return `<pre><code>function segment_${index}(viewport, items) {\n  const margin = viewport.height * ${1 + index % 5};\n  return items.filter((item) =&gt; item.bottom &gt; viewport.top - margin);\n}\n\nconsole.log("turn", ${index});</code></pre>`;
-  }
-
-  function table(index) {
-    return `<table><thead><tr><th>Metric</th><th>Baseline</th><th>Variant</th></tr></thead><tbody>
-      <tr><td>Frame p95</td><td>${18 + index % 9}.2 ms</td><td>${9 + index % 4}.4 ms</td></tr>
-      <tr><td>DOM nodes</td><td>${1000 + index * 17}</td><td>${850 + index * 9}</td></tr>
-      <tr><td>Working set</td><td>All</td><td>${12 + index % 20} segments</td></tr></tbody></table>`;
-  }
-
-  function createTurn(index) {
-    const role = index % 2 === 0 ? "user" : "assistant";
-    const article = document.createElement("article");
-    article.className = "turn";
-    article.id = `turn-${index}`;
-    article.dataset.testid = `conversation-turn-${index}`;
-    article.dataset.messageAuthorRole = role;
-    article.innerHTML = `<div class="turn-header"><div class="role"><span class="avatar">${role === "user" ? "U" : "AI"}</span>${role}</div><span class="turn-index">#${index}</span></div>
-      <h2>${role === "user" ? "Question" : "Response"} ${index}</h2>
-      <p>${sentence(18 + index % 18)}</p><p>${sentence(24 + index % 25)}</p>
-      ${config.code && index % 5 === 1 ? codeBlock(index) : ""}
-      ${config.tables && index % 7 === 3 ? table(index) : ""}
-      ${config.images && index % 11 === 5 ? `<div class="placeholder" role="img" aria-label="Synthetic image ${index}">Synthetic visual ${index}</div>` : ""}
-      <p>${sentence(16 + index % 20)}</p>
-      <div class="tool-row"><button>Copy</button><button>Useful</button><button>Retry</button></div>`;
-    return article;
-  }
-
-  function generate() {
-    const fragment = document.createDocumentFragment();
-    for (let index = 0; index < config.turns; index += 1) fragment.appendChild(createTurn(index));
-    feed.appendChild(fragment);
-    summary.textContent = `${config.turns} turns · ${document.getElementsByTagName("*").length.toLocaleString()} DOM nodes`;
-  }
-
-  function monitorFrames(now) {
-    frameDeltas.push(now - lastFrame);
-    if (frameDeltas.length > 20_000) frameDeltas.shift();
-    lastFrame = now;
-    requestAnimationFrame(monitorFrames);
-  }
-
-  function installObservers() {
-    try {
-      new PerformanceObserver((list) => longTasks.push(...list.getEntries().map((entry) => entry.duration))).observe({ type: "longtask", buffered: true });
-    } catch {}
-    try {
-      new PerformanceObserver((list) => layoutShifts.push(...list.getEntries().filter((entry) => !entry.hadRecentInput).map((entry) => entry.value))).observe({ type: "layout-shift", buffered: true });
-    } catch {}
-
-    if (config.stress) {
-      const intersection = new IntersectionObserver(() => {}, { rootMargin: "100% 0px" });
-      const resize = new ResizeObserver(() => {});
-      for (const node of [...feed.children].filter((_, index) => index % 5 === 0)) {
-        intersection.observe(node);
-        resize.observe(node);
-      }
-      stressTimer = setInterval(() => {
-        const start = performance.now();
-        while (performance.now() - start < 8 + Math.floor(random() * 12)) Math.sqrt(random() * 100_000);
-        const distantIndex = Math.floor(random() * feed.children.length);
-        const target = feed.children[distantIndex]?.querySelector(".turn-index");
-        if (target) target.dataset.tick = String(Date.now());
-      }, 850);
-    }
-  }
-
-  function startStreaming() {
-    if (!config.stream) return;
-    let index = config.turns;
-    streamTimer = setInterval(() => {
-      const nearBottom = scrollY + innerHeight > document.documentElement.scrollHeight - innerHeight * 2;
-      feed.appendChild(createTurn(index++));
-      if (nearBottom) scrollTo(0, document.documentElement.scrollHeight);
-      summary.textContent = `${feed.children.length} turns · streaming`;
-    }, 1800);
-  }
-
-  function percentile(values, p) {
-    if (!values.length) return 0;
-    const sorted = [...values].sort((a, b) => a - b);
-    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p / 100) - 1))];
-  }
-
-  function snapshot(samples = frameDeltas, taskSamples = longTasks, shiftSamples = layoutShifts) {
-    const recent = samples.filter((value) => value > 0 && value < 1000);
-    const stableFrames = recent.filter((value) => value >= 4 && value <= 50);
-    const expected = Math.min(33.33, Math.max(4, percentile(stableFrames, 10) || 1000 / 60));
-    const memory = performance.memory ? {
-      usedJSHeapSize: performance.memory.usedJSHeapSize,
-      totalJSHeapSize: performance.memory.totalJSHeapSize,
-      jsHeapSizeLimit: performance.memory.jsHeapSizeLimit
-    } : null;
-    return {
-      config,
-      timestamp: new Date().toISOString(),
-      domNodes: document.getElementsByTagName("*").length,
-      scrollHeight: document.documentElement.scrollHeight,
-      frameCount: recent.length,
-      expectedFrameInterval: Number(expected.toFixed(2)),
-      estimatedRefreshHz: Math.round(1000 / expected),
-      frameTime: {
-        p50: Number(percentile(recent, 50).toFixed(2)),
-        p95: Number(percentile(recent, 95).toFixed(2)),
-        p99: Number(percentile(recent, 99).toFixed(2)),
-        max: Number(Math.max(0, ...recent).toFixed(2))
-      },
-      droppedFrameRatio: Number((recent.filter((value) => value > expected * 1.5).length / Math.max(1, recent.length)).toFixed(4)),
-      longTasks: { count: taskSamples.length, totalMs: Number(taskSamples.reduce((sum, value) => sum + value, 0).toFixed(2)) },
-      cumulativeLayoutShift: Number(shiftSamples.reduce((sum, value) => sum + value, 0).toFixed(4)),
-      memory,
-      longView: [...document.querySelectorAll('[data-longview-state]')].reduce((counts, node) => {
-        const state = node.dataset.longviewState;
-        counts[state] = (counts[state] || 0) + 1;
-        return counts;
-      }, {})
-    };
-  }
-
-  async function runScroll({ durationMs = config.durationMs, passes = 1 } = {}) {
-    if (running) throw new Error("A benchmark pass is already running");
-    running = true;
-    const sampleStart = frameDeltas.length;
-    const taskStart = longTasks.length;
-    const shiftStart = layoutShifts.length;
-
-    try {
-      const maxScroll = Math.max(0, document.documentElement.scrollHeight - innerHeight);
-      const passDuration = durationMs / Math.max(1, passes * 2);
-
-      for (let pass = 0; pass < passes; pass += 1) {
-        for (const target of [maxScroll, 0]) {
-          const from = scrollY;
-          const startedAt = performance.now();
-          await new Promise((resolve) => {
-            function step(now) {
-              const progress = Math.min(1, (now - startedAt) / passDuration);
-              const eased = progress < 0.5
-                ? 2 * progress * progress
-                : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-              scrollTo(0, from + (target - from) * eased);
-              if (progress < 1) requestAnimationFrame(step);
-              else resolve();
-            }
-            requestAnimationFrame(step);
-          });
-        }
-      }
-
-      const metrics = snapshot(
-        frameDeltas.slice(sampleStart),
-        longTasks.slice(taskStart),
-        layoutShifts.slice(shiftStart)
-      );
-      result.textContent = JSON.stringify(metrics, null, 2);
-      return metrics;
-    } finally {
-      running = false;
-    }
-  }
-
-  async function correctnessProbe() {
-    const middle = feed.children[Math.floor(feed.children.length / 2)];
-    if (!middle) return { ok: false, reason: "no-middle-turn" };
-
-    const before = middle.getBoundingClientRect();
-    const text = middle.textContent || "";
-    middle.scrollIntoView({ block: "center" });
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const after = middle.getBoundingClientRect();
-
-    const button = middle.querySelector("button");
-    button?.focus({ preventScroll: true });
-    const focusWorks = Boolean(button && document.activeElement === button);
-
-    const paragraph = middle.querySelector("p");
+async function correctnessProbe() {
+  const targetIndex = Math.min(turns - 1, Math.max(1, Math.floor(turns * 0.72)));
+  const target = document.getElementById(`turn-${targetIndex}`);
+  const geometry = target?.getBoundingClientRect();
+  const anchor = target?.querySelector("a");
+  anchor?.focus();
+  const focusWorks = document.activeElement === anchor;
+  const paragraphNode = target?.querySelector("p")?.firstChild;
+  let selectionWorks = false;
+  if (paragraphNode) {
+    const range = document.createRange();
+    range.setStart(paragraphNode, 0);
+    range.setEnd(paragraphNode, Math.min(10, paragraphNode.length));
     const selection = getSelection();
-    let selectedText = "";
-    if (paragraph && selection) {
-      const range = document.createRange();
-      range.selectNodeContents(paragraph);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      selectedText = selection.toString();
-      selection.removeAllRanges();
-    }
-
-    const anchor = document.getElementById(middle.id);
-    return {
-      ok: text.includes("Response") || text.includes("Question"),
-      geometryFinite: [before.top, before.height, after.top, middle.offsetTop].every(Number.isFinite),
-      focusWorks,
-      selectionWorks: selectedText.length > 8,
-      anchorWorks: anchor === middle,
-      targetIndex: middle.dataset.testid,
-      textLength: text.length
-    };
+    selection.removeAllRanges();
+    selection.addRange(range);
+    selectionWorks = selection.toString().length > 0;
+    selection.removeAllRanges();
   }
+  target?.scrollIntoView({ block: "center" });
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const afterScroll = target?.getBoundingClientRect();
+  return {
+    ok: Boolean(target && geometry && Number.isFinite(geometry.top)),
+    geometryFinite: Boolean(geometry && Number.isFinite(geometry.height)),
+    focusWorks,
+    selectionWorks,
+    anchorWorks: Boolean(afterScroll && Math.abs(afterScroll.top - innerHeight / 2) < innerHeight),
+    targetIndex
+  };
+}
 
-  generate();
-  installObservers();
-  startStreaming();
-  requestAnimationFrame(monitorFrames);
+async function runScroll({ durationMs = runDuration, passes = 1 } = {}) {
+  frameLoopActive = false;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  frames.length = 0;
+  longTasks.length = 0;
+  observerCounts.intersection = 0;
+  observerCounts.resize = 0;
+  const initialHeap = performance.memory?.usedJSHeapSize || null;
+  frameLoopActive = true;
+  lastFrame = performance.now();
+  const start = performance.now();
+  const maximum = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+  let direction = 1;
+  let completedPasses = 0;
 
-  const ready = new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  window.__LONGVIEW_BENCHMARK__ = Object.freeze({ config, ready, runScroll, snapshot, correctnessProbe });
-  document.getElementById("run").addEventListener("click", () => runScroll().catch((error) => result.textContent = error.stack));
-  document.getElementById("top").addEventListener("click", () => scrollTo(0, 0));
-  document.getElementById("bottom").addEventListener("click", () => scrollTo(0, document.documentElement.scrollHeight));
-  ready.then(() => {
-    result.textContent = JSON.stringify(snapshot([]), null, 2);
-    if (config.autoRun) runScroll().catch((error) => result.textContent = error.stack);
+  await new Promise((resolve) => {
+    function step(now) {
+      const elapsed = now - start;
+      const phase = Math.min(1, (elapsed % durationMs) / durationMs);
+      const eased = 0.5 - Math.cos(phase * Math.PI) / 2;
+      scrollTo(0, direction > 0 ? maximum * eased : maximum * (1 - eased));
+      if (elapsed >= durationMs * (completedPasses + 1)) {
+        completedPasses += 1;
+        direction *= -1;
+      }
+      if (completedPasses >= passes) {
+        resolve();
+      } else {
+        requestAnimationFrame(step);
+      }
+    }
+    requestAnimationFrame(step);
   });
-  addEventListener("beforeunload", () => { clearInterval(streamTimer); clearInterval(stressTimer); });
-})();
+
+  frameLoopActive = false;
+  const filteredFrames = frames.filter((value) => value > 0 && value < 1000);
+  const frameBudget = quantile(filteredFrames, 0.1) * 1.5 || 16.67;
+  const longTaskTotal = longTasks.reduce((sum, entry) => sum + entry.duration, 0);
+  return {
+    turns,
+    domNodes: document.getElementsByTagName("*").length,
+    documentHeight: document.documentElement.scrollHeight,
+    frames: filteredFrames.length,
+    frameTime: {
+      p50: quantile(filteredFrames, 0.5),
+      p95: quantile(filteredFrames, 0.95),
+      p99: quantile(filteredFrames, 0.99),
+      max: Math.max(0, ...filteredFrames)
+    },
+    frameBudget,
+    estimatedRefreshHz: frameBudget ? Math.round(1000 / (frameBudget / 1.5)) : null,
+    droppedFrameRatio: filteredFrames.length
+      ? filteredFrames.filter((value) => value > frameBudget).length / filteredFrames.length
+      : 0,
+    longTasks: { count: longTasks.length, totalMs: longTaskTotal, maxMs: Math.max(0, ...longTasks.map((entry) => entry.duration)) },
+    observers: { ...observerCounts },
+    memory: performance.memory ? {
+      initialUsedJSHeapSize: initialHeap,
+      usedJSHeapSize: performance.memory.usedJSHeapSize,
+      totalJSHeapSize: performance.memory.totalJSHeapSize
+    } : null,
+    longView: collectLongView(),
+    url: location.href
+  };
+}
+
+render();
+attachObservers();
+startStress();
+startStream();
+targetSelect.addEventListener("change", () => document.getElementById(targetSelect.value)?.scrollIntoView({ block: "center" }));
+runButton.addEventListener("click", async () => {
+  runButton.disabled = true;
+  const result = await runScroll({ durationMs: 6000 });
+  stats.textContent = JSON.stringify(result.frameTime);
+  runButton.disabled = false;
+});
+
+window.__LONGVIEW_BENCHMARK__ = {
+  ready: Promise.resolve({ turns }),
+  runScroll,
+  collectLongView,
+  correctnessProbe,
+  config: { turns, stream, stress, runDuration, seed }
+};

@@ -1,7 +1,10 @@
-.PHONY: validate test-js test-python test-native doctor
+.PHONY: validate manifest test-js test-python test-native doctor install-overlay native-probe
 
-validate: test-js test-python test-native
+validate: manifest test-js test-python test-native
 	python3 tools/validate_repository.py
+
+manifest:
+	python3 tools/generate_source_manifest.py
 
 test-js:
 	npm run check:js
@@ -18,3 +21,9 @@ test-native:
 
 doctor:
 	python3 tools/longview.py doctor
+
+install-overlay:
+	python3 tools/longview.py install-overlay --force
+
+native-probe:
+	python3 tools/longview.py native-probe --force

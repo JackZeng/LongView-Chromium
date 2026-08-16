@@ -5,7 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
+import { launchChromium } from "./browser.mjs";
+import {
+  DEFAULT_TRACE_CATEGORIES,
+  collectCdpSnapshot,
+  diffMetrics,
+  startTrace,
+  stopTrace
+} from "./cdp.mjs";
 import { summarizeRuns } from "./metrics.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +27,10 @@ function parseArgs(argv) {
     stream: false,
     stress: false,
     longview: false,
-    headless: false
+    headless: false,
+    trace: false,
+    inlineFixture: false,
+    traceCategories: DEFAULT_TRACE_CATEGORIES
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -28,7 +38,15 @@ function parseArgs(argv) {
     else if (arg === "--stress") output.stress = true;
     else if (arg === "--longview") output.longview = true;
     else if (arg === "--headless") output.headless = true;
-    else if (arg.startsWith("--")) output[arg.slice(2)] = argv[++index];
+    else if (arg === "--trace") output.trace = true;
+    else if (arg === "--inline-fixture") output.inlineFixture = true;
+    else if (arg.startsWith("--")) {
+      const key = arg.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      if (index + 1 >= argv.length) throw new Error(`${arg} requires a value`);
+      output[key] = argv[++index];
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
   }
 
   output.turns = Number(output.turns);
@@ -47,6 +65,11 @@ function parseArgs(argv) {
   if (output.longview && output.turns < 50) {
     throw new Error("LongView benchmark mode requires at least 50 turns so the fixture crosses activation thresholds");
   }
+  if (output.longview && output.headless && !output.inlineFixture) {
+    throw new Error(
+      "Real-extension LongView runs must be headed; use xvfb-run on headless Linux hosts"
+    );
+  }
   const executable = path.resolve(output.executable);
   if (!fs.existsSync(executable)) throw new Error(`Browser executable does not exist: ${executable}`);
   output.executable = executable;
@@ -60,7 +83,7 @@ function contentType(file) {
   return "application/octet-stream";
 }
 
-function resolveServedFile(root, relative) {
+export function resolveServedFile(root, relative) {
   const base = path.resolve(root);
   const file = path.resolve(base, relative);
   const relation = path.relative(base, file);
@@ -86,7 +109,10 @@ async function serve(root) {
       response.end(data);
     });
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
   return { server, port: server.address().port };
 }
 
@@ -94,58 +120,123 @@ async function closeServer(server) {
   await new Promise((resolve) => server.close(resolve));
 }
 
-async function waitForLongView(page, turns) {
+async function waitForLongView(client, turns) {
   const minimum = Math.min(turns, 12);
-  const handle = await page.waitForFunction((required) => {
+  const expression = `(() => {
     const nodes = [...document.querySelectorAll('[data-longview-segment="true"]')];
     const states = nodes.reduce((counts, node) => {
       const state = node.dataset.longviewState || "unknown";
       counts[state] = (counts[state] || 0) + 1;
       return counts;
     }, {});
-    if (nodes.length >= required && states.hot > 0 && states.cold > 0) {
-      return { nodes: nodes.length, states };
-    }
-    return false;
-  }, minimum, { timeout: 20_000, polling: 100 });
-  return handle.jsonValue();
+    return nodes.length >= ${minimum} && states.hot > 0 && states.cold > 0
+      ? { nodes: nodes.length, states }
+      : false;
+  })()`;
+  return client.waitForExpression(expression, { timeout: 20_000, polling: 100 });
+}
+
+function escapeInlineScript(source) {
+  return source.replace(/<\/script/gi, "<\\/script");
+}
+
+function buildInlineFixture(query) {
+  const index = fs.readFileSync(path.join(fixtureRoot, "index.html"), "utf8");
+  const css = fs.readFileSync(path.join(fixtureRoot, "styles.css"), "utf8");
+  const app = fs.readFileSync(path.join(fixtureRoot, "app.js"), "utf8")
+    .replace(
+      "new URLSearchParams(location.search)",
+      `new URLSearchParams(${JSON.stringify(`?${query.toString()}`)})`
+    );
+  return index
+    .replace('<link rel="stylesheet" href="styles.css">', `<style>${css}</style>`)
+    .replace('<script src="app.js"></script>', `<script>${escapeInlineScript(app)}</script>`);
+}
+
+async function injectLongViewRuntime(client) {
+  await client.evaluate(`(() => {
+    const listeners = [];
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: async (message) => {
+          if (message?.type === "longview:get-settings") {
+            return { settings: { showDiagnostics: false } };
+          }
+          return { ok: true };
+        },
+        onMessage: { addListener: (listener) => listeners.push(listener) }
+      }
+    };
+    globalThis.__LONGVIEW_INLINE_LISTENERS__ = listeners;
+    return true;
+  })()`);
+  const scripts = [
+    "shared/core.js",
+    "content/00-namespace.js",
+    "content/10-config.js",
+    "content/20-adapters.js",
+    "content/30-segment-controller.js",
+    "content/40-diagnostics.js",
+    "content/50-bootstrap.js"
+  ];
+  for (const relative of scripts) {
+    const source = fs.readFileSync(path.join(repoRoot, "product/extension", relative), "utf8");
+    await client.evaluate(`${source}
+//# sourceURL=longview-inline://${relative}`);
+  }
+}
+
+function hostMetadata() {
+  const cpus = os.cpus();
+  return {
+    hostname: os.hostname(),
+    platform: os.platform(),
+    release: os.release(),
+    arch: os.arch(),
+    cpuModel: cpus[0]?.model || null,
+    logicalCpus: cpus.length,
+    totalMemoryBytes: os.totalmem(),
+    node: process.version
+  };
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const output = args.output
+    ? path.resolve(args.output)
+    : path.join(
+      repoRoot,
+      "benchmark-results",
+      `${args.longview ? "longview" : "baseline"}-${args.turns}-${Date.now()}.json`
+    );
+  const traceDirectory = args.traceDir
+    ? path.resolve(args.traceDir)
+    : path.join(path.dirname(output), "traces", path.basename(output, path.extname(output)));
+
   const { server, port } = await serve(fixtureRoot);
   const extensionPath = path.join(repoRoot, "product/extension");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "longview-benchmark-"));
-  const browserArgs = [
-    "--disable-background-timer-throttling",
-    "--disable-renderer-backgrounding",
-    "--disable-backgrounding-occluded-windows",
-    "--enable-precise-memory-info",
-    "--no-first-run",
-    "--no-default-browser-check"
-  ];
-  if (args.longview) {
-    browserArgs.push(
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`
-    );
-  }
-
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    executablePath: args.executable,
-    // Extension benchmarks intentionally use a real headed browser. Use
-    // xvfb-run on Linux CI or remote hosts without a display server.
-    headless: Boolean(args.headless && !args.longview),
-    args: browserArgs,
-    viewport: { width: 1440, height: 900 }
-  });
-
+  let browser = null;
   const results = [];
   let browserVersion = null;
+
   try {
-    browserVersion = context.browser()?.version() || null;
+    browser = await launchChromium({
+      executable: args.executable,
+      userDataDir,
+      extensionPath: args.longview && !args.inlineFixture ? extensionPath : null,
+      // Extension runs need a real window. On Linux CI use xvfb-run.
+      headless: Boolean(args.headless && (!args.longview || args.inlineFixture)),
+      browserArgs: [
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--enable-precise-memory-info"
+      ]
+    });
+    browserVersion = browser.version?.Browser || browser.version?.product || null;
+
     for (let run = 0; run < args.runs; run += 1) {
-      const page = await context.newPage();
       const query = new URLSearchParams({
         turns: String(args.turns),
         duration: String(args.duration),
@@ -153,34 +244,57 @@ async function main() {
         stress: args.stress ? "1" : "0",
         seed: String(42 + run)
       });
-      await page.goto(`http://127.0.0.1:${port}/?${query}`, { waitUntil: "networkidle" });
-      await page.waitForFunction(() => Boolean(window.__LONGVIEW_BENCHMARK__));
-      await page.evaluate(() => window.__LONGVIEW_BENCHMARK__.ready);
+      if (args.inlineFixture) {
+        await browser.setDocumentContent(buildInlineFixture(query));
+      } else {
+        await browser.navigate(`http://127.0.0.1:${port}/?${query}`);
+      }
+      await browser.client.waitForExpression("Boolean(window.__LONGVIEW_BENCHMARK__)", { timeout: 30_000 });
+      await browser.client.evaluate("window.__LONGVIEW_BENCHMARK__.ready.then(() => true)");
+      if (args.longview && args.inlineFixture) await injectLongViewRuntime(browser.client);
 
-      const activation = args.longview ? await waitForLongView(page, args.turns) : null;
-      const correctness = await page.evaluate(() => window.__LONGVIEW_BENCHMARK__.correctnessProbe());
-      if (!correctness.ok || !correctness.geometryFinite || !correctness.focusWorks ||
+      const activation = args.longview ? await waitForLongView(browser.client, args.turns) : null;
+      const correctness = await browser.client.evaluate("window.__LONGVIEW_BENCHMARK__.correctnessProbe()");
+      if (!correctness?.ok || !correctness.geometryFinite || !correctness.focusWorks ||
           !correctness.selectionWorks || !correctness.anchorWorks) {
         throw new Error(`Correctness probe failed: ${JSON.stringify(correctness)}`);
       }
 
-      const metrics = await page.evaluate(
-        (durationMs) => window.__LONGVIEW_BENCHMARK__.runScroll({ durationMs, passes: 1 }),
-        args.duration
+      const before = await collectCdpSnapshot(browser.client);
+      let trace = null;
+      if (args.trace) await startTrace(browser.browserClient, args.traceCategories);
+      const metrics = await browser.client.evaluate(
+        `window.__LONGVIEW_BENCHMARK__.runScroll({ durationMs: ${args.duration}, passes: 1 })`
       );
-      if (args.longview && (!metrics.longView.hot || !metrics.longView.cold)) {
-        throw new Error(`LongView state disappeared during run: ${JSON.stringify(metrics.longView)}`);
+      if (args.trace) {
+        const tracePath = path.join(traceDirectory, `run-${String(run + 1).padStart(2, "0")}.json`);
+        trace = await stopTrace(browser.browserClient, tracePath);
       }
-      results.push({ ...metrics, run, correctness, activation });
-      await page.close();
+      const after = await collectCdpSnapshot(browser.client);
+      if (args.longview && (!metrics?.longView?.hot || !metrics?.longView?.cold)) {
+        throw new Error(`LongView state disappeared during run: ${JSON.stringify(metrics?.longView)}`);
+      }
+      results.push({
+        ...metrics,
+        run,
+        correctness,
+        activation,
+        trace,
+        cdp: {
+          before,
+          after,
+          delta: diffMetrics(before.performance, after.performance)
+        }
+      });
     }
   } finally {
-    await context.close();
+    if (browser) await browser.close();
     await closeServer(server);
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 
   const report = {
+    schemaVersion: 2,
     metadata: {
       generatedAt: new Date().toISOString(),
       executable: args.executable,
@@ -190,20 +304,15 @@ async function main() {
       stream: args.stream,
       stress: args.stress,
       duration: args.duration,
-      platform: process.platform,
-      arch: process.arch,
-      node: process.version
+      tracing: args.trace,
+      headless: Boolean(args.headless && (!args.longview || args.inlineFixture)),
+      fixtureTransport: args.inlineFixture ? "inline-smoke" : "http",
+      publishableEvidence: !args.inlineFixture,
+      host: hostMetadata()
     },
     summary: summarizeRuns(results),
     runs: results
   };
-  const output = args.output
-    ? path.resolve(args.output)
-    : path.join(
-      repoRoot,
-      "benchmark-results",
-      `${args.longview ? "longview" : "baseline"}-${args.turns}-${Date.now()}.json`
-    );
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ output, summary: report.summary }, null, 2));

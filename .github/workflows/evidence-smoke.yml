@@ -1,0 +1,52 @@
+name: evidence-smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "benchmarks/**"
+      - "product/extension/**"
+      - "chromium.version"
+      - ".github/workflows/evidence-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Read pinned Chromium version
+        id: pin
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("chromium.version"))["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install matching Chrome for Testing
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: "${{ steps.pin.outputs.version }}"
+          install-dependencies: true
+      - name: Verify dependency-free CDP driver
+        run: |
+          xvfb-run -a node benchmarks/runner/driver-smoke.mjs "${{ steps.chrome.outputs.chrome-path }}"
+      - name: Run two-scale baseline/LongView smoke campaign
+        run: |
+          xvfb-run -a node benchmarks/runner/campaign.mjs \
+            --executable "${{ steps.chrome.outputs.chrome-path }}" \
+            --turns 100,500 \
+            --runs 1 \
+            --duration 1800 \
+            --stress \
+            --outputDir benchmark-results/evidence-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longview-evidence-smoke
+          path: benchmark-results/evidence-smoke/**
+          if-no-files-found: error

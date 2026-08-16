@@ -1,14 +1,24 @@
 {
   "name": "longview-chromium",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Native Chromium long-page working-set browser and rendering-policy research project",
   "private": true,
+  "license": "BSD-3-Clause",
   "type": "module",
-  "scripts": {
-    "test": "node --test product/extension/tests/*.test.mjs benchmarks/runner/tests/*.test.mjs",
-    "check:js": "node --check product/extension/background.js && node --check product/extension/content/00-namespace.js && node --check product/extension/content/10-config.js && node --check product/extension/content/20-adapters.js && node --check product/extension/content/30-segment-controller.js && node --check product/extension/content/40-diagnostics.js && node --check product/extension/content/50-bootstrap.js && node --check benchmarks/fixtures/conversation/app.js",
-    "validate": "python3 tools/validate_repository.py && npm run check:js && npm test"
-  },
   "engines": {
-    "node": ">=20"
+    "node": ">=22",
+    "python": ">=3.11"
+  },
+  "scripts": {
+    "validate": "python3 tools/validate_repository.py",
+    "manifest": "python3 tools/generate_source_manifest.py",
+    "manifest:check": "python3 tools/generate_source_manifest.py --check",
+    "test": "node --test product/extension/tests/*.test.mjs benchmarks/runner/tests/*.test.mjs",
+    "check:js": "node --check product/extension/background.js && node --check product/extension/shared/core.js && node --check product/extension/content/00-namespace.js && node --check product/extension/content/10-config.js && node --check product/extension/content/20-adapters.js && node --check product/extension/content/30-segment-controller.js && node --check product/extension/content/40-diagnostics.js && node --check product/extension/content/50-bootstrap.js && node --check product/extension/ui/options.js && node --check product/extension/ui/popup.js && node --check product/extension/ui/welcome.js && node --check benchmarks/fixtures/conversation/app.js && node --check benchmarks/runner/browser.mjs && node --check benchmarks/runner/campaign-lib.mjs && node --check benchmarks/runner/campaign.mjs && node --check benchmarks/runner/cdp.mjs && node --check benchmarks/runner/compare.mjs && node --check benchmarks/runner/driver-smoke.mjs && node --check benchmarks/runner/gate.mjs && node --check benchmarks/runner/metrics.mjs && node --check benchmarks/runner/runner.mjs && node --check tools/smoke_chromium.mjs",
+    "benchmark:baseline": "node benchmarks/runner/runner.mjs",
+    "benchmark:longview": "node benchmarks/runner/runner.mjs --longview",
+    "benchmark:campaign": "node benchmarks/runner/campaign.mjs",
+    "benchmark:gate": "node benchmarks/runner/gate.mjs",
+    "benchmark:compare": "node benchmarks/runner/compare.mjs"
   }
 }

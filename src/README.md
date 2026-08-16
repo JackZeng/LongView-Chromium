@@ -1,7 +1,7 @@
 # LongView source
 
-LongView-specific source that is independent of the large Chromium checkout lives here.
+`src/native/` contains a dependency-free C++20 model for lifecycle policy, eligibility, indexing, materialization telemetry, and anti-thrashing behavior.
 
-- `native/`: dependency-free C++20 implementation of the segment working-set and lifecycle policy. It is executable documentation for the future Blink implementation and is compiled on Linux, macOS and Windows CI.
+The same sources are mirrored into `chromium_overlay/longview/common/` so they can be built by Chromium's GN toolchain as `//longview:segment_policy_test`.
 
-The browser runtime currently lives in `product/extension/` because v0.1 is the measurement-first phase. Chromium-native code will be introduced as small, auditable patches only after benchmarks identify costs that the runtime layer cannot remove.
+This model is a policy specification and parity oracle. It is not evidence that Blink has released layout or paint state.

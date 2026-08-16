@@ -1,0 +1,52 @@
+name: pinned-native-probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pinned-native-probe-${{ matrix.name }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS pinned Chromium probe
+            runner: longview-macos
+          - name: Windows pinned Chromium probe
+            runner: longview-windows
+    runs-on: [self-hosted, "${{ matrix.runner }}"]
+    timeout-minutes: 360
+    env:
+      LONGVIEW_WORKSPACE: ${{ runner.tool_cache }}/longview-chromium-151
+      PYTHONPATH: ${{ github.workspace }}/tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Diagnose host and persistent workspace
+        run: python tools/longview.py doctor
+      - name: Fetch or synchronize the exact Chromium revision
+        run: python tools/longview.py fetch
+      - name: Build and execute native policy and Blink feature probes
+        run: >-
+          python tools/longview.py native-probe
+          --force
+          --profile longview-dev
+          --output LongViewNativeProbe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.runner }}-native-probe-metadata
+          path: |
+            ${{ env.LONGVIEW_WORKSPACE }}/src/longview/OVERLAY.json
+            ${{ env.LONGVIEW_WORKSPACE }}/src/longview/BLINK_OBSERVABILITY.json
+            ${{ env.LONGVIEW_WORKSPACE }}/src/longview/NATIVE_PROBE_RESULT.json
+            ${{ env.LONGVIEW_WORKSPACE }}/src/out/LongViewNativeProbe/args.gn
+          if-no-files-found: error

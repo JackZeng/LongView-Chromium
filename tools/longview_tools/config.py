@@ -21,12 +21,11 @@ class ChromiumPin:
         commit = str(payload["commit"]).strip().lower()
         if len(commit) != 40 or any(character not in "0123456789abcdef" for character in commit):
             raise ValueError(f"Invalid Chromium commit in {path}: {commit!r}")
-        return cls(
-            version=str(payload["version"]),
-            tag=str(payload["tag"]),
-            commit=commit,
-            channel=str(payload.get("channel", "unknown")),
-        )
+        version = str(payload["version"])
+        tag = str(payload["tag"])
+        if tag != f"refs/tags/{version}":
+            raise ValueError(f"Chromium tag {tag!r} does not match version {version!r}")
+        return cls(version=version, tag=tag, commit=commit, channel=str(payload.get("channel", "unknown")))
 
 
 @dataclass(frozen=True)
@@ -50,6 +49,14 @@ class Paths:
     def profiles(self) -> Path:
         return self.workspace / "profiles"
 
+    @property
+    def overlay_source(self) -> Path:
+        return self.repo / "chromium_overlay"
+
+    @property
+    def overlay_destination(self) -> Path:
+        return self.chromium_src / "longview"
+
     @classmethod
     def discover(cls, repo: Path, workspace: str | None = None) -> "Paths":
         configured = workspace or os.environ.get("LONGVIEW_WORKSPACE")
@@ -59,31 +66,28 @@ class Paths:
 
 def host_platform() -> str:
     value = platform.system().lower()
-    if value == "darwin":
-        return "mac"
-    if value == "windows":
-        return "win"
-    if value == "linux":
-        return "linux"
+    if value == "darwin": return "mac"
+    if value == "windows": return "win"
+    if value == "linux": return "linux"
     raise RuntimeError(f"Unsupported host platform: {platform.system()}")
 
 
 def browser_binary(chromium_src: Path, output_dir: str) -> Path:
     build = chromium_src / "out" / output_dir
     current = host_platform()
-    if current == "mac":
-        return build / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
-    if current == "win":
-        return build / "chrome.exe"
+    if current == "mac": return build / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
+    if current == "win": return build / "chrome.exe"
     return build / "chrome"
+
+
+def built_target(chromium_src: Path, output_dir: str, target: str) -> Path:
+    suffix = ".exe" if host_platform() == "win" else ""
+    return chromium_src / "out" / output_dir / f"{target}{suffix}"
 
 
 def depot_tool(paths: Paths, name: str) -> Path:
     suffix = ".bat" if host_platform() == "win" else ""
     local = paths.depot_tools / f"{name}{suffix}"
-    if local.exists():
-        return local
+    if local.exists(): return local
     resolved = shutil.which(f"{name}{suffix}") or shutil.which(name)
-    if resolved:
-        return Path(resolved)
-    return local
+    return Path(resolved) if resolved else local

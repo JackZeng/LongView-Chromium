@@ -1,21 +1,21 @@
 #ifndef LONGVIEW_SEGMENT_MODEL_H_
 #define LONGVIEW_SEGMENT_MODEL_H_
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <string_view>
 
 namespace longview {
 
-enum class SegmentState : std::uint8_t {
+enum class SegmentState {
   kHot,
   kWarm,
   kCold,
   kPinned,
 };
 
-enum class MaterializationReason : std::uint8_t {
+enum class MaterializationReason {
   kViewportApproach,
   kGeometryQuery,
   kFindInPage,
@@ -28,68 +28,98 @@ enum class MaterializationReason : std::uint8_t {
   kScriptMutation,
 };
 
-struct SegmentGeometry {
-  double top = 0.0;
-  double height = 0.0;
-
-  [[nodiscard]] double bottom() const { return top + height; }
+enum class IneligibleReason {
+  kNone,
+  kInvalidGeometry,
+  kTooSmall,
+  kActiveInteraction,
+  kLiveMedia,
+  kDynamicSurface,
+  kCrossBoundaryPositioning,
+  kFrequentlyMaterialized,
 };
 
-struct WorkingSetSettings {
-  double hot_screens = 1.25;
-  double warm_ahead_screens = 6.0;
-  double warm_behind_screens = 2.5;
-  double maximum_prediction_boost_screens = 5.0;
-  double prediction_seconds = 0.35;
+struct PolicyConfig {
+  double minimum_block_size = 96.0;
+  double hot_viewports = 1.25;
+  double warm_ahead_viewports = 7.0;
+  double warm_behind_viewports = 2.5;
+  double speed_ahead_viewports = 2.0;
+  double speed_behind_viewports = 0.5;
+  double velocity_reference = 1200.0;
+  double velocity_cap = 3.0;
+  std::uint64_t hot_demotion_delay_ms = 250;
+  std::uint64_t warm_demotion_delay_ms = 700;
+  std::uint64_t materialization_window_ms = 2000;
+  std::size_t pin_after_materializations = 4;
+};
+
+struct EligibilityInput {
+  double start = 0.0;
+  double end = 0.0;
+  double block_size = 0.0;
+  bool has_focus = false;
+  bool has_selection = false;
+  bool is_editable = false;
+  bool has_live_media = false;
+  bool has_canvas = false;
+  bool has_webgl = false;
+  bool has_dialog = false;
+  bool has_popover = false;
+  bool has_cross_boundary_sticky = false;
+  bool has_fixed_descendant = false;
+  std::size_t recent_materializations = 0;
+};
+
+struct EligibilityResult {
+  bool eligible = false;
+  bool pin = false;
+  IneligibleReason reason = IneligibleReason::kNone;
+};
+
+struct Viewport {
+  double start = 0.0;
+  double end = 0.0;
+  double velocity = 0.0;
+  int direction = 1;
 };
 
 struct WorkingSet {
-  double hot_top = 0.0;
-  double hot_bottom = 0.0;
-  double warm_top = 0.0;
-  double warm_bottom = 0.0;
-  int direction = 0;
+  double hot_start = 0.0;
+  double hot_end = 0.0;
+  double warm_start = 0.0;
+  double warm_end = 0.0;
 };
 
-[[nodiscard]] WorkingSet ComputeWorkingSet(
-    double scroll_y,
-    double viewport_height,
-    double velocity_pixels_per_second,
-    double document_height,
-    const WorkingSetSettings& settings);
-
-[[nodiscard]] SegmentState ClassifySegment(
-    const SegmentGeometry& geometry,
-    const WorkingSet& working_set);
-
-class SegmentLifecycle {
- public:
-  using Clock = std::chrono::steady_clock;
-  using TimePoint = Clock::time_point;
-
-  explicit SegmentLifecycle(SegmentGeometry geometry);
-
-  [[nodiscard]] SegmentState state() const { return state_; }
-  [[nodiscard]] const SegmentGeometry& geometry() const { return geometry_; }
-  [[nodiscard]] std::size_t transition_count() const { return transition_count_; }
-  [[nodiscard]] bool IsPinned(TimePoint now) const;
-
-  void SetGeometry(SegmentGeometry geometry);
-  bool TransitionTo(SegmentState next, TimePoint now);
-  void RecordMaterialization(MaterializationReason reason, TimePoint now);
-  SegmentState ResolveDesiredState(SegmentState working_set_state, TimePoint now);
-
- private:
-  void RemoveExpiredMaterializations(TimePoint now);
-
-  SegmentGeometry geometry_;
-  SegmentState state_ = SegmentState::kCold;
-  std::size_t transition_count_ = 0;
-  TimePoint pinned_until_{};
-  std::deque<TimePoint> recent_materializations_;
-  MaterializationReason last_materialization_reason_ =
-      MaterializationReason::kViewportApproach;
+struct Segment {
+  std::uint64_t id = 0;
+  double start = 0.0;
+  double end = 0.0;
+  double block_size = 0.0;
+  bool eligible = true;
+  bool pinned = false;
+  IneligibleReason ineligible_reason = IneligibleReason::kNone;
+  SegmentState state = SegmentState::kHot;
+  std::uint64_t last_transition_ms = 0;
+  std::uint64_t last_hot_ms = 0;
+  std::uint64_t last_warm_ms = 0;
+  std::deque<std::uint64_t> materialization_timestamps;
 };
+
+EligibilityResult EvaluateEligibility(const EligibilityInput& input,
+                                      const PolicyConfig& config);
+WorkingSet ComputeWorkingSet(const Viewport& viewport,
+                             const PolicyConfig& config);
+SegmentState Classify(const Segment& segment,
+                      const WorkingSet& set,
+                      const PolicyConfig& config,
+                      std::uint64_t now_ms);
+void PruneMaterializations(Segment* segment,
+                           const PolicyConfig& config,
+                           std::uint64_t now_ms);
+std::string_view SegmentStateName(SegmentState state);
+std::string_view MaterializationReasonName(MaterializationReason reason);
+std::string_view IneligibleReasonName(IneligibleReason reason);
 
 }  // namespace longview
 
