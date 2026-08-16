@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "LongView Engine",
+  "short_name": "LongView",
+  "version": "0.1.0",
+  "description": "Keeps extremely long pages responsive by managing visible and off-screen content as a working set.",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "LongView",
+    "default_popup": "ui/popup.html"
+  },
+  "options_page": "ui/options.html",
+  "commands": {
+    "toggle-longview": {
+      "suggested_key": {
+        "default": "Alt+Shift+L",
+        "mac": "MacCtrl+Shift+L"
+      },
+      "description": "Enable or disable LongView on the current site"
+    },
+    "toggle-diagnostics": {
+      "suggested_key": {
+        "default": "Alt+Shift+D",
+        "mac": "MacCtrl+Shift+D"
+      },
+      "description": "Toggle the LongView diagnostics overlay"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false,
+      "js": [
+        "shared/core.js",
+        "content/00-namespace.js",
+        "content/10-config.js",
+        "content/20-adapters.js",
+        "content/30-segment-controller.js",
+        "content/40-diagnostics.js",
+        "content/50-bootstrap.js"
+      ]
+    }
+  ]
+}

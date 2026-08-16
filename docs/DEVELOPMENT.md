@@ -1,80 +1,69 @@
-# Development Guide
+# Development guide
 
-## Current phase
+## Branch and commit policy
 
-The repository is in bootstrap/measurement phase. Chromium source is not committed here.
-
-## Recommended model
-
-Use a separate local Chromium checkout and apply LongView work as a small downstream layer/patch series until the architecture stabilizes.
-
-Example workspace:
+Use small, measurable changes. Recommended branches:
 
 ```text
-workspace/
-├── depot_tools/
-├── chromium/
-│   └── src/
-└── LongView-Chromium/
+agent/<description>
+experiment/<mechanism>
+fix/<compatibility-regression>
 ```
 
-## Upstream pinning
+A performance change should not mix unrelated product UI work. Commit messages should state the mechanism, not an unverified outcome.
 
-Before implementation work begins, add a machine-readable upstream revision file (planned: `chromium.version`) containing the exact Chromium Git SHA and any required branch/tag metadata.
+## Required local checks
 
-Never document only a marketing version such as “Chrome 140”; reproducible work requires an exact source revision.
-
-## Build profiles
-
-We expect at least two profiles:
-
-### Baseline
-
-Unmodified upstream Chromium at the pinned revision.
-
-### LongView
-
-The same revision plus LongView changes.
-
-Comparisons between mismatched revisions are invalid for performance claims.
-
-## Branching
-
-Suggested workflow:
-
-```text
-main
-feature/benchmark-harness
-feature/segment-detector
-experiment/content-visibility
-experiment/blink-display-lock
-experiment/geometry-capsule
+```bash
+python3 tools/validate_extension.py
+npm run check:js
+npm test
+PYTHONPATH=tools python3 -m unittest discover -s tools/tests -v
+cmake -S src/native -B build/native
+cmake --build build/native
+ctest --test-dir build/native --output-on-failure
 ```
 
-Keep experimental engine changes isolated until they have benchmark evidence.
+When a usable Chromium executable is available without blocking enterprise policy:
 
-## Commit discipline
+```bash
+xvfb-run -a node tools/smoke_chromium.mjs --executable /path/to/chromium --turns 200
+```
 
-A change affecting performance should include:
+On macOS and Windows, run the smoke page in a normal visible browser as well, because compositor behavior, refresh rate, and input differ from virtual/headless environments.
 
-- workload/fixture used;
-- baseline revision;
-- LongView revision;
-- hardware/OS metadata;
-- before/after metrics;
-- compatibility implications;
-- trace or reproducible command when practical.
+## Extension architecture rules
 
-## Coding style
+- `shared/core.js` contains deterministic policy functions and must load first.
+- content scripts load in numeric order.
+- `50-bootstrap.js` must load last.
+- no inline scripts or event handlers; Manifest V3 CSP is validated.
+- no remote code.
+- no site DOM deletion.
+- every injected inline property must be restorable.
+- scrolling must not call `getBoundingClientRect()` on every segment every frame.
+- new site adapters require a generic fallback and a fixture/test.
 
-For code placed inside Chromium, follow Chromium's existing style, lint, OWNERS, and testing conventions for the target subtree.
+## Performance experiment template
 
-For standalone LongView tools, keep dependencies minimal and deterministic.
+Before implementation, write down:
 
-## First development tasks
+1. suspected bottleneck;
+2. mechanism;
+3. expected metric change;
+4. fixture and scale;
+5. compatibility risk;
+6. rollback condition.
 
-1. Add upstream pin and bootstrap scripts.
-2. Build benchmark fixture generator.
-3. Add trace capture/summary tooling.
-4. Capture untouched Chromium baselines on macOS and Windows.
-5. Prototype standards-compliant off-screen rendering reduction.
+After implementation, attach raw results and describe negative findings as well as wins.
+
+## Native migration rules
+
+`src/native` is an executable policy specification, not a parallel permanent implementation. When policy enters Blink:
+
+- preserve unit semantics;
+- add Chromium unit/web tests;
+- put behavior behind a disabled-by-default feature;
+- add trace events for eligibility, transition, forced materialization, and rejection;
+- keep the patch series small and rebasing-friendly;
+- do not serialize/remove DOM until identity and API semantics are explicitly solved.

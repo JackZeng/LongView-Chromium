@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LongView Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header><div class="logo">LV</div><div><h1>LongView settings</h1><p>Control working-set size, activation thresholds, and compatibility.</p></div></header>
+    <form id="form">
+      <section>
+        <h2>General</h2>
+        <label class="toggle"><input id="enabled" type="checkbox"><span>Enable LongView automatically</span></label>
+        <label>Mode
+          <select id="mode"><option value="conservative">Conservative</option><option value="aggressive">Aggressive (pause cold animations)</option></select>
+        </label>
+        <label class="toggle"><input id="showDiagnostics" type="checkbox"><span>Show diagnostics overlay by default</span></label>
+      </section>
+      <section>
+        <h2>Activation</h2>
+        <div class="grid">
+          <label>Minimum page length (screens)<input id="minimumPageScreens" type="number" min="4" max="1000"></label>
+          <label>Minimum DOM nodes<input id="minimumDomNodes" type="number" min="500" max="2000000"></label>
+          <label>Minimum segments<input id="minimumSegments" type="number" min="4" max="10000"></label>
+          <label>Minimum segment height (px)<input id="minimumSegmentHeight" type="number" min="40" max="4000"></label>
+        </div>
+      </section>
+      <section>
+        <h2>Working set</h2>
+        <div class="grid">
+          <label>Hot radius (screens)<input id="hotScreens" type="number" min="0.5" max="6" step="0.25"></label>
+          <label>Warm ahead (screens)<input id="warmAheadScreens" type="number" min="1" max="30" step="0.5"></label>
+          <label>Warm behind (screens)<input id="warmBehindScreens" type="number" min="1" max="20" step="0.5"></label>
+          <label>Maximum warm segments<input id="maxWarmSegments" type="number" min="4" max="1000"></label>
+        </div>
+      </section>
+      <section>
+        <h2>Excluded sites</h2>
+        <label>One hostname per line. Wildcards may start with <code>*.</code>
+          <textarea id="excludedHosts" rows="7" placeholder="docs.example.com&#10;*.internal.example"></textarea>
+        </label>
+      </section>
+      <div class="footer"><button type="button" id="reset">Reset defaults</button><button class="primary" type="submit">Save settings</button></div>
+      <p id="status" role="status"></p>
+    </form>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -6,24 +6,34 @@ Thumbs.db
 *.swp
 *.swo
 
-# Python tooling
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 .pytest_cache/
 
-# Node tooling
+# Node
 node_modules/
 .npm/
 
-# Benchmark output
+# C/C++
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+
+# LongView outputs
+.longview/
+build/
+dist/
 benchmark-results/
 traces/
 *.trace.json
 *.perfetto-trace
 
-# Chromium / depot_tools local state
+# Chromium / depot_tools checkout
 chromium/
 depot_tools/
 src-out/
@@ -31,11 +41,7 @@ out/
 .gclient
 .gclient_entries
 
-# Local build artifacts
-build/
-dist/
+# Logs and temporary files
+*.log
 tmp/
 .cache/
-
-# Logs
-*.log

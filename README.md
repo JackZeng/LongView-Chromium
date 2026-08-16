@@ -1,78 +1,128 @@
 # LongView Chromium
 
-**A Chromium-based browser focused on making extremely long, dynamic web pages stay fast.**
+**A Chromium-based browser distribution for extremely long, dynamic web pages.**
 
-LongView Chromium explores a browser-engine approach to long-page performance: keep the visible region fully interactive, progressively reduce work for off-screen regions, and materialize cold regions only when they are needed.
+LongView keeps the visible part of a page fully interactive while progressively reducing rendering work for content far outside the viewport. The first working release targets long AI conversations, documentation, logs, forums, feeds, notebooks, and rendered Markdown.
 
-The initial target is pathological long-page workloads such as very long AI conversations, documentation, logs, feeds, forums, notebooks, and large rendered Markdown documents.
+> Project status: **v0.1.0 developer MVP**. It is buildable from a pinned Chromium revision and includes a working LongView runtime, diagnostics, benchmarks, packaging tools, and an executable native lifecycle specification. Deep Blink layout-state eviction is the next engine phase, not a claim of this release.
 
-## Core idea
+## What works now
 
-Treat an extremely long page more like virtual memory than one permanently-live render tree.
+- Pinned Chromium stable baseline: **151.0.7922.77**, commit `ff37cfca210138f2a40b843b4a8195ab7e4fc7ff`.
+- One-command checkout, sync, GN generation, build, launch, package, and benchmark CLI.
+- Manifest V3 LongView runtime loaded into the Chromium distribution.
+- ChatGPT, Claude, Gemini, and generic repeated-content discovery.
+- HOT / WARM / COLD / PINNED segment lifecycle.
+- Scroll-velocity prediction with asymmetric forward/backward warming.
+- Binary range lookup, bounded warm-segment count, and no full-DOM scan on every scroll frame.
+- Compatibility wakeups for focus, selection, find-in-page (`beforematch`), resize, streaming append, and DOM mutation.
+- Conservative and opt-in aggressive modes.
+- Live popup, settings, per-page controls, and diagnostics overlay.
+- Deterministic 10–5000-turn conversation benchmark with code, tables, images, streaming, observers, remote mutations, and controlled long tasks.
+- Baseline-vs-LongView Playwright runner and JSON result format.
+- Dependency-free C++ lifecycle model with anti-thrashing tests, ready to be transplanted into Blink.
 
-```text
-Viewport               HOT   — fully interactive
-Near viewport          WARM  — prepared / reduced work
-Far from viewport      COLD  — compact retained state
-On-demand access              — materialize and restore
-```
-
-The long-term goal is for scrolling cost to scale primarily with **visible complexity**, not total document complexity.
-
-## Project status
-
-**Phase 0 — repository bootstrap and measurement.**
-
-We intentionally start with reproducible benchmarks, instrumentation, and conservative Chromium primitives before attempting invasive Blink/LayoutNG changes.
-
-## Initial technical direction
-
-1. Build reproducible pathological long-page benchmarks.
-2. Measure frame time, main-thread work, style/layout/paint/raster cost, memory, and long tasks.
-3. Prototype page segmentation and off-screen freezing using existing Chromium/Blink mechanisms.
-4. Introduce HOT / WARM / COLD segment lifecycle management inside Blink.
-5. Add predictive warming based on scroll velocity and direction.
-6. Explore compact geometry capsules for cold segments.
-7. Add site adapters only where generic engine-level optimization is insufficient.
-
-## Repository layout
+## First-principles model
 
 ```text
-docs/          Architecture, roadmap, development notes, ADRs
-benchmarks/    Long-page benchmark fixtures and measurement tooling
-tools/         Developer and performance-analysis tools
-patches/       Chromium patch-series notes / downstream integration helpers
-src/           LongView-specific prototypes before final Chromium placement
+Viewport / immediate neighborhood    HOT      full rendering and interaction
+Likely near-future viewport           WARM     prepared, reduced off-screen work
+Far from viewport                     COLD     content-visibility skips rendering work
+Focus/search/selection/API demand     PINNED   forced materialization for correctness
 ```
 
-## Engineering principles
+The target is not merely “lower memory” or “more GPU.” The target is:
 
-- Preserve web compatibility by default.
-- Prefer general engine-level solutions over site-specific hacks.
-- Never claim an optimization without a reproducible benchmark.
-- Keep scrolling responsive even when page JavaScript is busy whenever web semantics allow it.
-- Make aggressive behavior opt-in until compatibility is proven.
-- Keep the delta from upstream Chromium small, reviewable, and maintainable.
+```text
+scrolling cost ≈ O(visible working set)
+not
+scrolling cost ≈ O(total document complexity)
+```
 
-## Target platforms
+## Quick start
 
-Initial development targets:
+Chromium is a large source tree. Use a machine with at least 16 GB RAM and roughly 120 GB of available storage; more is preferable.
 
-- macOS
-- Windows
+```bash
+# Check tools, platform, disk, and the pinned Chromium revision.
+python3 tools/longview.py doctor
 
-Linux may be used for CI, benchmark infrastructure, and development tooling where appropriate.
+# Fetch depot_tools + Chromium and reset to the pinned stable commit.
+python3 tools/longview.py fetch
 
-## Upstream strategy
+# Build a fast incremental developer configuration.
+python3 tools/longview.py build --profile longview-dev
 
-Chromium source is **not vendored into this repository at bootstrap**. LongView will track an explicit Chromium upstream revision and maintain a small, auditable integration/patch layer. See `docs/adr/0001-upstream-strategy.md`.
+# Launch the built browser with an isolated profile and LongView enabled.
+python3 tools/longview.py run https://chatgpt.com/
+```
 
-## Current milestone
+Run the same binary without LongView for a controlled baseline:
 
-The first milestone is not “build a new browser UI.” It is to prove, with measurements, that long-page scrolling cost can be made substantially less dependent on total page length without breaking web behavior.
+```bash
+python3 tools/longview.py run --baseline 'http://127.0.0.1:8000/'
+```
 
-See `docs/ROADMAP.md` and `docs/BENCHMARKS.md`.
+See [docs/BUILDING.md](docs/BUILDING.md) for macOS, Windows, and Linux prerequisites and [docs/QUICKSTART.md](docs/QUICKSTART.md) for the shortest developer workflow.
+
+## Benchmark
+
+Install only the benchmark runner dependency:
+
+```bash
+cd benchmarks/runner
+npm install
+cd ../..
+```
+
+Then capture comparable runs from the same Chromium binary:
+
+```bash
+python3 tools/longview.py benchmark --baseline --turns 1000 --runs 5 --stress
+python3 tools/longview.py benchmark            --turns 1000 --runs 5 --stress
+node benchmarks/runner/compare.mjs benchmark-results/baseline.json benchmark-results/longview.json
+```
+
+Every result records the executable, fixture scale, platform, frame-time distribution, dropped-frame ratio, long tasks, DOM scale, layout shift, memory when available, and LongView state counts.
+
+## Repository map
+
+```text
+chromium.version              Exact upstream Chromium tag and commit
+configs/gn/                   Reproducible baseline/dev/release GN profiles
+product/extension/            Working LongView browser runtime and UI
+benchmarks/fixtures/          Deterministic pathological long-page workloads
+benchmarks/runner/            Automated baseline-vs-LongView measurement
+src/native/                   C++ working-set/lifecycle executable specification
+tools/                        Checkout, build, run, package, validation, smoke test
+docs/                         Architecture, compatibility, build, roadmap, ADRs
+patches/                      Future small auditable Chromium-native patch series
+```
+
+## Validate this repository
+
+```bash
+python3 tools/validate_extension.py
+npm run check:js
+npm test
+PYTHONPATH=tools python3 -m unittest discover -s tools/tests -v
+cmake -S src/native -B build/native
+cmake --build build/native
+ctest --test-dir build/native --output-on-failure
+```
+
+A real-browser smoke check is also included:
+
+```bash
+xvfb-run -a node tools/smoke_chromium.mjs --executable /path/to/chromium --turns 200
+```
+
+## Architectural boundary of v0.1
+
+This release deliberately uses Chromium's existing `content-visibility` machinery rather than pretending that a full LayoutNG cold-tree eviction system already exists. It materially reduces style/layout/paint/raster work for suitable off-screen segments, but it does **not** yet remove site-owned DOM, JavaScript objects, or every retained layout/accessibility structure.
+
+The next native milestone moves the tested lifecycle policy into Blink, adds engine-owned eligibility and diagnostics, and measures which retained structures still scale with total page length. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 
-LongView-specific code is released under the BSD 3-Clause License unless a file states otherwise. Chromium and third-party components retain their original licenses.
+LongView-specific code is BSD 3-Clause. Chromium and all third-party components keep their original licenses.

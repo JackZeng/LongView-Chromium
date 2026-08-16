@@ -1,0 +1,49 @@
+name: validate
+
+on:
+  push:
+    branches: [main, "agent/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: longview-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Repository (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}/tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate repository and extension
+        run: python tools/validate_repository.py
+      - name: Check JavaScript syntax
+        run: npm run check:js
+      - name: Run JavaScript tests
+        run: npm test
+      - name: Run Python tests
+        run: python -m unittest discover -s tools/tests -v
+      - name: Compile Python tools
+        run: python -m compileall -q tools
+      - name: Configure native model
+        run: cmake -S src/native -B build/native -DCMAKE_BUILD_TYPE=Release
+      - name: Build native model
+        run: cmake --build build/native --config Release --parallel 2
+      - name: Test native model
+        run: ctest --test-dir build/native -C Release --output-on-failure
