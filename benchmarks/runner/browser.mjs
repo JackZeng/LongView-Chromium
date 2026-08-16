@@ -92,19 +92,36 @@ async function waitForPage(host, port, expectedUrl = null, timeout = 20_000) {
 }
 
 function terminate(child) {
-  if (!child || child.exitCode !== null || child.killed) return;
+  if (!child || child.exitCode !== null) return;
   if (process.platform === "win32") {
     const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
       stdio: "ignore",
       windowsHide: true
     });
     killer.unref();
-  } else {
+  } else if (!child.killed) {
     child.kill("SIGTERM");
     setTimeout(() => {
       if (child.exitCode === null) child.kill("SIGKILL");
     }, 2000).unref();
   }
+}
+
+export async function waitForChildExit(child, timeout = 5000) {
+  if (!child || child.exitCode !== null) return true;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeListener("exit", onExit);
+      resolve(value);
+    };
+    const onExit = () => finish(true);
+    const timer = setTimeout(() => finish(child.exitCode !== null), timeout);
+    child.once("exit", onExit);
+  });
 }
 
 export async function launchChromium({
@@ -156,6 +173,7 @@ export async function launchChromium({
     if (version.webSocketDebuggerUrl) browserWebSocketUrl = version.webSocketDebuggerUrl;
   } catch (error) {
     terminate(child);
+    await waitForChildExit(child, 5000);
     throw new Error(`${error.message}\nChromium stderr:\n${stderr}`);
   }
 
@@ -206,7 +224,10 @@ export async function launchChromium({
     await pageClient.close().catch(() => {});
     await browserClient.send("Browser.close").catch(() => {});
     await browserClient.close().catch(() => {});
-    terminate(child);
+    if (!(await waitForChildExit(child, 5000))) {
+      terminate(child);
+      await waitForChildExit(child, 5000);
+    }
   }
 
   return {
