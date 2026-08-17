@@ -1,0 +1,42 @@
+name: chromium-pin-watch
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - id: pin
+        name: Compare pinned Chromium with Chrome for Testing Stable
+        shell: bash
+        run: |
+          set +e
+          python tools/release/check_chromium_pin.py > pin-status.json
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          cat pin-status.json
+          exit 0
+      - name: Open or update security-upgrade issue
+        if: steps.pin.outputs.code == '10'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const status = JSON.parse(fs.readFileSync('pin-status.json','utf8'));
+            const title = `[security] Update Chromium pin to ${status.latestStable}`;
+            const body = `The supported Chrome for Testing Stable version is **${status.latestStable}**, while LongView is pinned to **${status.current}**.\n\nRun the pin-upgrade compatibility workflow before any stable release.\n\nDetected: ${new Date().toISOString()}`;
+            const {data} = await github.rest.issues.listForRepo({owner:context.repo.owner,repo:context.repo.repo,state:'open',labels:'chromium-update',per_page:100});
+            const existing = data.find(issue => issue.title === title);
+            if (existing) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:existing.number,body});
+            else await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title,body,labels:['chromium-update','security']});
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chromium-pin-status
+          path: pin-status.json
