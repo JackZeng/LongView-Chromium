@@ -8,6 +8,7 @@ on:
       - "product/extension/**"
       - "chromium.version"
       - ".github/workflows/evidence-smoke.yml"
+      - ".github/workflows/manifest-refresh.yml"
 
 permissions:
   contents: read
