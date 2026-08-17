@@ -1,0 +1,57 @@
+name: macos-blink-native-alpha-v5
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - "tools/ci/build_macos_blink_native_alpha_v5.sh"
+      - ".github/workflows/macos-blink-native-alpha-v5.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-blink-native-alpha-v5
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 360
+    env:
+      LONGVIEW_JOBS: "1"
+      NINJA_SUMMARIZE_BUILD: "1"
+      GOMA_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build full Chromium with aggressively reclaimed capacity
+        shell: bash
+        run: bash tools/ci/build_macos_blink_native_alpha_v5.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LongView-Chromium-macOS-Blink-Native-Alpha-v5
+          path: dist/macos-native-alpha-v4/**
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish fixed final-v5 prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='v0.4.0-blink-native-alpha.final-v5'
+          version="$(cat dist/macos-native-alpha-v4/VERSION.txt)"
+          gh release delete "$tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$tag" \
+            dist/macos-native-alpha-v4/LongView-Chromium-macOS-arm64-Blink-Native-Alpha.zip \
+            dist/macos-native-alpha-v4/SHA256SUMS.txt \
+            dist/macos-native-alpha-v4/README-FIRST.txt \
+            dist/macos-native-alpha-v4/VERSION.txt \
+            dist/macos-native-alpha-v4/proof/* \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "LongView Chromium $version" \
+            --notes "Full-source Apple Silicon Blink Native Alpha built after aggressive hosted-runner capacity reclamation. Includes direct and controller-driven native COLD proof."
