@@ -1,0 +1,74 @@
+name: native-alpha-build-status
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/native-alpha-build-status.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: native-alpha-build-status
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait for the full-source macOS build and capture its result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/build-status
+          run_id=''
+          for attempt in $(seq 1 330); do
+            run_id="$(gh run list \
+              --workflow macos-blink-native-alpha.yml \
+              --branch agent/blink-native-cold-alpha \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // ""')"
+            if [ -n "$run_id" ]; then
+              status="$(gh run view "$run_id" --json status --jq .status)"
+              if [ "$status" = completed ]; then
+                break
+              fi
+            fi
+            sleep 60
+          done
+          test -n "$run_id"
+          conclusion="$(gh run view "$run_id" --json conclusion --jq .conclusion)"
+          url="$(gh run view "$run_id" --json url --jq .url)"
+          head_sha="$(gh run view "$run_id" --json headSha --jq .headSha)"
+          printf '{\n  "runId": %s,\n  "conclusion": "%s",\n  "url": "%s",\n  "headSha": "%s"\n}\n' \
+            "$run_id" "$conclusion" "$url" "$head_sha" \
+            > docs/build-status/native-alpha-latest.json
+          if [ "$conclusion" != success ]; then
+            gh run view "$run_id" --log-failed > docs/build-status/native-alpha-failure.log || true
+          else
+            rm -f docs/build-status/native-alpha-failure.log
+          fi
+      - name: Commit build status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/build-status
+          git commit -m 'chore: record Blink native Alpha build result' || exit 0
+          for attempt in 1 2 3; do
+            git pull --rebase origin agent/blink-native-cold-alpha && \
+              git push origin HEAD:agent/blink-native-cold-alpha && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
