@@ -52,7 +52,43 @@ jobs:
           print(f'Verified Phase 7 payload: {len(archive)} bytes, {digest}')
           PY
           tar -xzf /tmp/phase7-payload.tar.gz -C "$RUNNER_TEMP/phase7"
-          python "$RUNNER_TEMP/phase7/apply.py" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/phase7/payload"
+          python - "$GITHUB_WORKSPACE" "$RUNNER_TEMP/phase7/payload" "$RUNNER_TEMP/phase7/apply.py" <<'PY'
+          from pathlib import Path
+          import runpy
+          import sys
+
+          repo = Path(sys.argv[1]).resolve()
+          payload = Path(sys.argv[2]).resolve()
+          apply_path = Path(sys.argv[3]).resolve()
+          namespace = runpy.run_path(str(apply_path))
+
+          def robust_update_cli(target_repo: Path) -> None:
+              cli = target_repo / 'tools/longview_tools/cli.py'
+              text = cli.read_text(encoding='utf-8')
+              replacements = (
+                  (
+                      '    for target in ("//longview:segment_policy_test", "//longview:blink_feature_probe"): build(paths, profile, output, target)',
+                      '    for target in ("//longview:segment_policy_test", "//longview:engine_contract_test", "//longview:blink_bridge_test", "//longview:blink_feature_probe"): build(paths, profile, output, target)',
+                  ),
+                  (
+                      '    for executable in ("segment_policy_test", "blink_feature_probe"): run([built_target(paths.chromium_src, output, executable)], cwd=paths.chromium_src)',
+                      '    for executable in ("segment_policy_test", "engine_contract_test", "blink_bridge_test", "blink_feature_probe"): run([built_target(paths.chromium_src, output, executable)], cwd=paths.chromium_src)',
+                  ),
+                  (
+                      '"targets": ["segment_policy_test", "blink_feature_probe"]',
+                      '"targets": ["segment_policy_test", "engine_contract_test", "blink_bridge_test", "blink_feature_probe"]',
+                  ),
+              )
+              for old, new in replacements:
+                  if old not in text:
+                      raise RuntimeError(f'native_probe statement changed; refusing unsafe rewrite: {old}')
+                  text = text.replace(old, new, 1)
+              cli.write_text(text, encoding='utf-8', newline='\n')
+
+          namespace['update_cli'] = robust_update_cli
+          sys.argv = [str(apply_path), str(repo), str(payload)]
+          raise SystemExit(namespace['main']())
+          PY
           rm -rf .phase7-transport
           rm .github/workflows/phase7-bootstrap-once.yml
           python tools/generate_source_manifest.py
