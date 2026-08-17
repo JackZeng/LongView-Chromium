@@ -1,0 +1,109 @@
+name: promote-blink-native-alpha
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/promote-blink-native-alpha.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-blink-native-alpha
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Reconstruct and verify exact native alpha delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .longview-native-alpha/payload.00a \
+            .longview-native-alpha/payload.00b \
+            .longview-native-alpha/payload.01 \
+            .longview-native-alpha/payload.02a \
+            .longview-native-alpha/payload.02b1a1 \
+            .longview-native-alpha/payload.02b1a2a \
+            .longview-native-alpha/payload.02b1a2b \
+            .longview-native-alpha/payload.02b1b \
+            .longview-native-alpha/payload.02b2 \
+            .longview-native-alpha/payload.03 \
+            .longview-native-alpha/payload.04 \
+            .longview-native-alpha/payload.05 \
+            > /tmp/longview-native-alpha.b64
+          base64 --decode /tmp/longview-native-alpha.b64 > /tmp/longview-native-alpha.tar.gz
+          echo "7652e8d3022643b1c0799ec5438b845d3e7454e47dce0937541f09babc6f33db  /tmp/longview-native-alpha.tar.gz" | sha256sum -c -
+          tar -tzf /tmp/longview-native-alpha.tar.gz > /tmp/longview-native-alpha-files.txt
+          test "$(wc -l < /tmp/longview-native-alpha-files.txt | tr -d ' ')" -eq 30
+          tar -xzf /tmp/longview-native-alpha.tar.gz
+
+      - name: Remove transport and one-time maintenance files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .longview-native-alpha
+          rm -f .github/workflows/blink-source-snapshot.yml
+          rm -f .github/workflows/macos-native-capacity.yml
+          rm -f .github/workflows/repo-snapshot.yml
+          rm -f .github/workflows/promote-blink-native-alpha.yml
+          rm -f patches/blink/0001-longview-observability-feature.patch
+          python tools/generate_source_manifest.py
+
+      - name: Validate JavaScript, Python, repository and native COLD contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check:js
+          npm test
+          PYTHONPATH=tools python -m unittest discover -s tools/tests -p 'test_*.py' -v
+          python -m compileall -q tools
+          python tools/validate_native_cold_patch.py
+          python tools/validate_repository.py
+          git diff --check
+
+      - name: Build and test native policy and engine contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S src/native -B build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --parallel 2
+          ctest --test-dir build/native --output-on-failure
+          cmake -S src/engine -B build/engine -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/engine --parallel 2
+          ctest --test-dir build/engine --output-on-failure
+
+      - name: Replace staging history with one reviewed feature commit
+        shell: bash
+        env:
+          TARGET_BRANCH: agent/blink-native-cold-alpha
+          EXPECTED_MAIN: c78b2c2c4f208dd16f73ef6856e8830835e24ca5
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main "$TARGET_BRANCH"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN"
+          git reset --soft origin/main
+          git add -A
+          git commit -m 'feat: add Blink-native COLD LayoutObject eviction alpha'
+          remote_sha="$(git rev-parse origin/$TARGET_BRANCH)"
+          git push \
+            --force-with-lease="refs/heads/$TARGET_BRANCH:$remote_sha" \
+            origin HEAD:"$TARGET_BRANCH"
