@@ -1,0 +1,3 @@
+LongView Chromium Blink Native Alpha final build trigger.
+
+This connector-authored commit intentionally retriggers the complete Apple Silicon Chromium build after all GitHub Actions-authored patch, version, packaging, source-manifest, and controller-proof commits have settled.
