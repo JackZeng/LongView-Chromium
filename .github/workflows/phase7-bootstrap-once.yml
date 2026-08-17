@@ -52,8 +52,9 @@ jobs:
           print(f'Verified Phase 7 payload: {len(archive)} bytes, {digest}')
           PY
           tar -xzf /tmp/phase7-payload.tar.gz -C "$RUNNER_TEMP/phase7"
-          # GitHub's workflow token cannot create workflow files. The connector
-          # installs those separately after the tested source commit lands.
+          # Keep the real validation workflow only for the test workspace. The
+          # connector installs all workflow files after the source commit lands.
+          cp "$RUNNER_TEMP/phase7/payload/.github/workflows/phase7-validation.yml" "$RUNNER_TEMP/phase7-validation.yml"
           rm -rf "$RUNNER_TEMP/phase7/payload/.github/workflows"
           python - "$GITHUB_WORKSPACE" "$RUNNER_TEMP/phase7/payload" "$RUNNER_TEMP/phase7/apply.py" <<'PY'
           from pathlib import Path
@@ -97,6 +98,7 @@ jobs:
           PY
           rm -rf .phase7-transport
           python tools/generate_source_manifest.py
+          cp "$RUNNER_TEMP/phase7-validation.yml" .github/workflows/phase7-validation.yml
       - name: Validate repository and JavaScript
         shell: bash
         run: |
@@ -124,6 +126,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .github/workflows/phase7-validation.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
