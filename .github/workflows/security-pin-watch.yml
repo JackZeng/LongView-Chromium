@@ -32,10 +32,29 @@ jobs:
             const status = JSON.parse(fs.readFileSync('pin-status.json','utf8'));
             const title = `[security] Update Chromium pin to ${status.latestStable}`;
             const body = `The supported Chrome for Testing Stable version is **${status.latestStable}**, while LongView is pinned to **${status.current}**.\n\nRun the pin-upgrade compatibility workflow before any stable release.\n\nDetected: ${new Date().toISOString()}`;
-            const {data} = await github.rest.issues.listForRepo({owner:context.repo.owner,repo:context.repo.repo,state:'open',labels:'chromium-update',per_page:100});
-            const existing = data.find(issue => issue.title === title);
-            if (existing) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:existing.number,body});
-            else await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title,body,labels:['chromium-update','security']});
+            const {data} = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            const existing = data.find(issue => !issue.pull_request && issue.title === title);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['enhancement']
+              });
+            }
       - uses: actions/upload-artifact@v4
         with:
           name: chromium-pin-status
