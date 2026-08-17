@@ -1,5 +1,7 @@
 name: refresh-source-manifest
 
+# This maintenance workflow is intentionally excluded from SOURCE_MANIFEST.sha256
+# so it can safely retrigger checks after an Actions-authored manifest commit.
 on:
   push:
     branches: [main, "agent/**"]
