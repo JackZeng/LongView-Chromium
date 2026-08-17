@@ -1,0 +1,90 @@
+name: bump-native-alpha-version-once
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/bump-native-alpha-version-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Normalize version metadata to 0.4.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          version = '0.4.0'
+          Path('VERSION').write_text(version + '\n', encoding='utf-8')
+
+          for filename in ('package.json', 'product/extension/manifest.json', 'branding/product.json', 'site/data/status.json'):
+              path = Path(filename)
+              data = json.loads(path.read_text(encoding='utf-8'))
+              if filename == 'package.json':
+                  data['version'] = version
+                  if 'scripts' in data and 'sbom' in data['scripts']:
+                      data['scripts']['sbom'] = re.sub(r'--version\s+\S+', f'--version {version}', data['scripts']['sbom'])
+                      data['scripts']['sbom'] = re.sub(r'longview-[^/ ]+\.cdx\.json', f'longview-{version}.cdx.json', data['scripts']['sbom'])
+              elif filename == 'product/extension/manifest.json':
+                  data['version'] = version
+              elif isinstance(data, dict):
+                  if 'version' in data:
+                      data['version'] = version
+                  if 'release' in data and isinstance(data['release'], dict) and 'version' in data['release']:
+                      data['release']['version'] = version
+              path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+
+          pyproject = Path('pyproject.toml')
+          text = pyproject.read_text(encoding='utf-8')
+          text, count = re.subn(r'(?m)^version\s*=\s*"[^"]+"', f'version = "{version}"', text, count=1)
+          if count != 1:
+              raise SystemExit('pyproject version entry not found')
+          pyproject.write_text(text, encoding='utf-8')
+
+          namespace = Path('product/extension/content/00-namespace.js')
+          text = namespace.read_text(encoding='utf-8')
+          text = text.replace('0.3.0', version)
+          namespace.write_text(text, encoding='utf-8')
+
+          status = Path('docs/IMPLEMENTATION_STATUS.md')
+          text = status.read_text(encoding='utf-8').replace('Delivered in v0.3.0', 'Delivered through v0.4.0 Native Alpha')
+          status.write_text(text, encoding='utf-8')
+
+          changelog = Path('CHANGELOG.md')
+          old = changelog.read_text(encoding='utf-8')
+          heading = '''# Changelog\n\n## 0.4.0 - Blink Native COLD Alpha\n\n- compile the exact pinned Chromium source with a runtime-feature-gated Blink native COLD hook;\n- detach and count descendant LayoutObjects while retaining segment geometry;\n- materialize detached subtrees through Blink's layout reattachment lifecycle;\n- bridge HOT/WARM/COLD/PINNED runtime state to native detach and restoration counters;\n- add reproducible patch generation, contract validation and proof-carrying Apple Silicon builds.\n\n'''
+          if '## 0.4.0 - Blink Native COLD Alpha' not in old:
+              old = re.sub(r'^# Changelog\s*\n', heading, old, count=1)
+          changelog.write_text(old, encoding='utf-8')
+          PY
+          rm .github/workflows/bump-native-alpha-version-once.yml
+          python tools/generate_source_manifest.py
+      - name: Validate version consistency
+        shell: bash
+        run: |
+          python tools/validate_repository.py
+          node --check product/extension/content/35-native-cold.js
+          node --test product/extension/tests/native-cold.test.mjs
+      - name: Commit versioned native Alpha state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'release: prepare LongView Chromium 0.4.0 native Alpha'
+          git push origin HEAD:agent/blink-native-cold-alpha
