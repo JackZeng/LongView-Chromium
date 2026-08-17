@@ -25,12 +25,14 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           source_path = Path('tools/release/longview_release.py')
           source = source_path.read_text(encoding='utf-8')
           start = source.index('def parse_artifact_spec')
           end = source.index('\n\ndef build_manifest', start)
-          replacement = '''def split_artifact_spec(spec: str) -> tuple[str, str, str, str | None]:
+          replacement = dedent('''
+          def split_artifact_spec(spec: str) -> tuple[str, str, str, str | None]:
               # platform:arch:path[:https://signature-url]
               # Only the two structural prefixes are split. This preserves
               # Windows drive letters, while the optional signature URL is
@@ -69,29 +71,27 @@ jobs:
               )
               artifact.validate()
               return artifact
-          '''
-          replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in replacement.splitlines())
+          ''').lstrip()
           source_path.write_text(source[:start] + replacement + source[end:], encoding='utf-8', newline='\n')
 
           test_path = Path('tools/release/test_release_tool.py')
           tests = test_path.read_text(encoding='utf-8')
           marker = '    def test_rollout_is_stable(self) -> None:\n'
-          addition = '''    def test_artifact_spec_preserves_windows_drive_and_signature_url(self) -> None:
-              target_platform, arch, raw_path, signature_url = longview_release.split_artifact_spec(
-                  r"windows:x64:C:\\release\\LongView.zip:https://updates.example.test:8443/LongView.zip.sig"
-              )
-              self.assertEqual(target_platform, "windows")
-              self.assertEqual(arch, "x64")
-              self.assertEqual(raw_path, r"C:\\release\\LongView.zip")
-              self.assertEqual(signature_url, "https://updates.example.test:8443/LongView.zip.sig")
-
-          '''
-          addition = '\n'.join(line[10:] if line.startswith('          ') else line for line in addition.splitlines()) + '\n'
+          addition = (
+              '    def test_artifact_spec_preserves_windows_drive_and_signature_url(self) -> None:\n'
+              '        target_platform, arch, raw_path, signature_url = longview_release.split_artifact_spec(\n'
+              '            r"windows:x64:C:\\\\release\\\\LongView.zip:https://updates.example.test:8443/LongView.zip.sig"\n'
+              '        )\n'
+              '        self.assertEqual(target_platform, "windows")\n'
+              '        self.assertEqual(arch, "x64")\n'
+              '        self.assertEqual(raw_path, r"C:\\\\release\\\\LongView.zip")\n'
+              '        self.assertEqual(signature_url, "https://updates.example.test:8443/LongView.zip.sig")\n'
+              '\n'
+          )
           if 'test_artifact_spec_preserves_windows_drive_and_signature_url' not in tests:
               if marker not in tests:
                   raise SystemExit('release test insertion point changed')
-              tests = tests.replace(marker, addition + marker, 1)
-              test_path.write_text(tests, encoding='utf-8', newline='\n')
+              test_path.write_text(tests.replace(marker, addition + marker, 1), encoding='utf-8', newline='\n')
           PY
       - name: Validate release tools
         shell: bash
