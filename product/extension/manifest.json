@@ -52,6 +52,7 @@
         "content/10-config.js",
         "content/20-adapters.js",
         "content/30-segment-controller.js",
+        "content/35-native-cold.js",
         "content/40-diagnostics.js",
         "content/50-bootstrap.js"
       ]

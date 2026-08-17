@@ -1,0 +1,30 @@
+name: repo-snapshot
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/repo-snapshot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export tracked repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output=longview-repository.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longview-repository-snapshot
+          path: longview-repository.tar.gz
+          if-no-files-found: error
+          retention-days: 2

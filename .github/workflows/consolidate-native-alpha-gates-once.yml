@@ -1,0 +1,41 @@
+name: consolidate-native-alpha-gates-once
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/consolidate-native-alpha-gates-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Keep only the final two-proof promotion gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/native-alpha-promotion-gate.yml \
+            .github/workflows/native-alpha-v3-promotion-gate.yml \
+            .github/workflows/consolidate-native-alpha-gates-once.yml
+          python tools/generate_source_manifest.py
+          python tools/validate_repository.py
+      - name: Commit consolidated gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'ci: require both final native Alpha proofs for promotion'
+          git push origin HEAD:agent/blink-native-cold-alpha

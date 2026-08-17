@@ -1,0 +1,62 @@
+name: publish-native-alpha-build-diagnostic
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/publish-native-alpha-build-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture latest final native build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/native-alpha-diagnostic
+          run_id="$(gh run list \
+            --workflow macos-blink-native-alpha-final.yml \
+            --branch agent/blink-native-cold-alpha \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // ""')"
+          if [ -z "$run_id" ]; then
+            printf '{"status":"no-run","conclusion":"no-run"}\n' > dist/native-alpha-diagnostic/status.json
+          else
+            for attempt in $(seq 1 20); do
+              state="$(gh run view "$run_id" --json status --jq .status)"
+              [ "$state" = completed ] && break
+              sleep 60
+            done
+            gh run view "$run_id" --json databaseId,status,conclusion,url,headSha,createdAt,updatedAt \
+              > dist/native-alpha-diagnostic/status.json
+            gh run view "$run_id" --log-failed \
+              > dist/native-alpha-diagnostic/failure.log 2>&1 || true
+            gh run view "$run_id" --log \
+              > dist/native-alpha-diagnostic/full.log 2>&1 || true
+            tail -n 400 dist/native-alpha-diagnostic/full.log \
+              > dist/native-alpha-diagnostic/tail.log || true
+          fi
+      - name: Publish replaceable diagnostic prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='v0.4.0-blink-native-alpha-build-status'
+          gh release delete "$tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$tag" dist/native-alpha-diagnostic/* \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title 'LongView Blink Native Alpha Build Diagnostic' \
+            --notes 'Replaceable diagnostic snapshot for the latest final full-source Apple Silicon build. This is not a browser release.'

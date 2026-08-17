@@ -1,0 +1,27 @@
+name: macos-native-capacity
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/macos-native-capacity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report Apple Silicon capacity
+        shell: bash
+        run: |
+          set -euo pipefail
+          uname -a
+          sysctl -n hw.memsize
+          sysctl -n hw.ncpu
+          df -h /
+          du -sh /Applications/Xcode*.app 2>/dev/null || true
+          xcodebuild -version

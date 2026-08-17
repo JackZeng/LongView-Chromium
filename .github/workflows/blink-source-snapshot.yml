@@ -1,0 +1,65 @@
+name: blink-source-snapshot
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/blink-source-snapshot.yml"
+      - "chromium.version"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned Chromium source slice through Gitiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(python3 -c 'import json; print(json.load(open("chromium.version"))["commit"])')"
+          root="$PWD/chromium-sparse"
+          mkdir -p "$root"
+          fetch_file() {
+            local path="$1"
+            mkdir -p "$root/$(dirname "$path")"
+            curl --fail --silent --show-error --location --retry 3 \
+              "https://chromium.googlesource.com/chromium/src/+/${commit}/${path}?format=TEXT" \
+              | base64 --decode > "$root/$path"
+          }
+          while IFS= read -r path; do
+            fetch_file "$path"
+          done <<'EOF'
+          third_party/blink/renderer/core/BUILD.gn
+          third_party/blink/renderer/core/core.gni
+          third_party/blink/renderer/core/dom/document.h
+          third_party/blink/renderer/core/dom/document.cc
+          third_party/blink/renderer/core/dom/element.h
+          third_party/blink/renderer/core/dom/element.cc
+          third_party/blink/renderer/core/dom/node.h
+          third_party/blink/renderer/core/dom/node.cc
+          third_party/blink/renderer/core/frame/local_frame_view.h
+          third_party/blink/renderer/core/frame/local_frame_view.cc
+          third_party/blink/renderer/core/layout/layout_object.h
+          third_party/blink/renderer/core/layout/layout_object.cc
+          third_party/blink/renderer/core/style/computed_style.h
+          third_party/blink/renderer/core/css/style_engine.h
+          third_party/blink/renderer/core/css/style_engine.cc
+          third_party/blink/renderer/platform/runtime_enabled_features.json5
+          EOF
+          mkdir -p "$root/third_party/blink/renderer/core/display_lock"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://chromium.googlesource.com/chromium/src/+archive/${commit}/third_party/blink/renderer/core/display_lock.tar.gz" \
+            | tar -xz -C "$root/third_party/blink/renderer/core/display_lock"
+          printf '%s\n' "$commit" > "$root/PINNED_COMMIT.txt"
+          tar -czf blink-source-snapshot.tar.gz -C "$root" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blink-source-snapshot
+          path: blink-source-snapshot.tar.gz
+          if-no-files-found: error
+          retention-days: 3
