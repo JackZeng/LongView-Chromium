@@ -1,0 +1,232 @@
+name: macos-arm64-test-build
+
+on:
+  push:
+    branches: ["agent/macos-arm64-test-build"]
+    paths:
+      - ".github/workflows/macos-arm64-test-build.yml"
+      - "product/extension/**"
+      - "chromium.version"
+      - "VERSION"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Apple Silicon runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          sw_vers
+          xcodebuild -version
+
+      - name: Read pinned Chromium version
+        id: pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import json; print(json.load(open("chromium.version"))["version"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Pinned Chromium: $version"
+
+      - name: Download pinned Chrome for Testing ARM64
+        shell: bash
+        env:
+          CHROME_VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          set -euo pipefail
+          url="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/mac-arm64/chrome-mac-arm64.zip"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/chrome.zip" "$url"
+          ditto -x -k "$RUNNER_TEMP/chrome.zip" "$RUNNER_TEMP/chrome"
+          test -x "$RUNNER_TEMP/chrome/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+          "$RUNNER_TEMP/chrome/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" --version
+
+      - name: Compile LongView native launcher and assemble app
+        shell: bash
+        env:
+          CHROME_VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/LongView Chromium Test.app"
+          CONTENTS="$APP/Contents"
+          MACOS="$CONTENTS/MacOS"
+          RESOURCES="$CONTENTS/Resources"
+          mkdir -p "$MACOS" "$RESOURCES"
+
+          cp -R "$RUNNER_TEMP/chrome/chrome-mac-arm64/Google Chrome for Testing.app" "$RESOURCES/Chromium.app"
+          cp -R product/extension "$RESOURCES/LongViewExtension"
+
+          cat > "$RUNNER_TEMP/LongViewLauncher.swift" <<'SWIFT'
+          import Cocoa
+          import Foundation
+
+          let fileManager = FileManager.default
+          guard let resources = Bundle.main.resourceURL else {
+              fputs("LongView: unable to locate app resources\n", stderr)
+              exit(2)
+          }
+
+          let chromium = resources
+              .appendingPathComponent("Chromium.app")
+              .appendingPathComponent("Contents/MacOS/Google Chrome for Testing")
+          let longViewExtension = resources.appendingPathComponent("LongViewExtension")
+
+          guard fileManager.isExecutableFile(atPath: chromium.path) else {
+              fputs("LongView: bundled Chromium executable is missing\n", stderr)
+              exit(3)
+          }
+          guard fileManager.fileExists(atPath: longViewExtension.appendingPathComponent("manifest.json").path) else {
+              fputs("LongView: bundled extension is missing\n", stderr)
+              exit(4)
+          }
+
+          let profileRoot = fileManager.homeDirectoryForCurrentUser
+              .appendingPathComponent("Library/Application Support/LongView Chromium Test/Profile", isDirectory: true)
+          do {
+              try fileManager.createDirectory(at: profileRoot, withIntermediateDirectories: true)
+          } catch {
+              fputs("LongView: cannot create profile directory: \(error)\n", stderr)
+              exit(5)
+          }
+
+          var arguments = [
+              "--user-data-dir=\(profileRoot.path)",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--disable-extensions-except=\(longViewExtension.path)",
+              "--load-extension=\(longViewExtension.path)",
+              "--enable-logging=stderr"
+          ]
+          arguments.append(contentsOf: CommandLine.arguments.dropFirst())
+
+          let process = Process()
+          process.executableURL = chromium
+          process.arguments = arguments
+          do {
+              try process.run()
+              process.waitUntilExit()
+              exit(process.terminationStatus)
+          } catch {
+              fputs("LongView: failed to launch Chromium: \(error)\n", stderr)
+              exit(6)
+          }
+          SWIFT
+
+          xcrun swiftc -O -framework Cocoa "$RUNNER_TEMP/LongViewLauncher.swift" -o "$MACOS/LongViewLauncher"
+          file "$MACOS/LongViewLauncher" | tee "$RUNNER_TEMP/launcher-file.txt"
+          grep -q "arm64" "$RUNNER_TEMP/launcher-file.txt"
+
+          cat > "$CONTENTS/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key><string>en</string>
+            <key>CFBundleDisplayName</key><string>LongView Chromium Test</string>
+            <key>CFBundleExecutable</key><string>LongViewLauncher</string>
+            <key>CFBundleIdentifier</key><string>io.longview.chromium.test</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>LongView Chromium Test</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>$(cat VERSION)-test</string>
+            <key>CFBundleVersion</key><string>${GITHUB_RUN_NUMBER}</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          plutil -lint "$CONTENTS/Info.plist"
+          test -f "$RESOURCES/LongViewExtension/manifest.json"
+          python3 -m json.tool "$RESOURCES/LongViewExtension/manifest.json" >/dev/null
+
+          # Test distribution: ad-hoc signature only. Production builds use the
+          # dedicated Developer ID + notarization release workflow.
+          codesign --force --deep --sign - --timestamp=none "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Smoke test bundled browser and LongView load flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/LongView Chromium Test.app"
+          CHROME="$APP/Contents/Resources/Chromium.app/Contents/MacOS/Google Chrome for Testing"
+          EXT="$APP/Contents/Resources/LongViewExtension"
+          PROFILE="$RUNNER_TEMP/longview-smoke-profile"
+          "$CHROME" \
+            --headless=new \
+            --no-first-run \
+            --no-default-browser-check \
+            --user-data-dir="$PROFILE" \
+            --disable-extensions-except="$EXT" \
+            --load-extension="$EXT" \
+            --dump-dom 'data:text/html,<title>LongView Smoke</title><main id="ok">LongView macOS ARM64 test</main>' \
+            > "$RUNNER_TEMP/smoke.html"
+          grep -q "LongView macOS ARM64 test" "$RUNNER_TEMP/smoke.html"
+
+      - name: Package downloadable test build
+        id: package
+        shell: bash
+        env:
+          CHROME_VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/macos-test
+          cat > "$RUNNER_TEMP/README-FIRST.txt" <<EOF
+          LongView Chromium macOS ARM64 Test Build
+
+          LongView version: $(cat VERSION)
+          Chromium: ${CHROME_VERSION}
+          Architecture: Apple Silicon arm64
+          Signing: ad-hoc test signature (NOT Apple-notarized)
+
+          Usage:
+          1. Unzip the archive.
+          2. Open "LongView Chromium Test.app".
+          3. If Gatekeeper blocks the test app, right-click it and choose Open.
+             If macOS still blocks it, run:
+             xattr -dr com.apple.quarantine "LongView Chromium Test.app"
+          4. Navigate to a very long ChatGPT/Claude/Gemini page.
+          5. LongView Engine is preloaded. Use Control+Shift+D for diagnostics.
+
+          This test build packages the pinned Chrome for Testing ARM64 binary
+          with the LongView 0.3.0 runtime. It is intended for immediate UX and
+          long-page performance testing. It is not the production-signed build
+          and does not claim the still-experimental deep Blink derived-state
+          eviction path is enabled.
+          EOF
+          cp "$RUNNER_TEMP/README-FIRST.txt" dist/macos-test/README-FIRST.txt
+          ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/LongView Chromium Test.app" "dist/macos-test/LongView-Chromium-macOS-arm64-test.zip"
+          shasum -a 256 "dist/macos-test/LongView-Chromium-macOS-arm64-test.zip" | tee "dist/macos-test/SHA256SUMS.txt"
+          echo "tag=v$(cat VERSION)-macos-arm64-test.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LongView-Chromium-macOS-arm64-test
+          path: dist/macos-test/**
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub prerelease for direct download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.package.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            dist/macos-test/LongView-Chromium-macOS-arm64-test.zip \
+            dist/macos-test/SHA256SUMS.txt \
+            dist/macos-test/README-FIRST.txt \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "LongView Chromium macOS ARM64 Test" \
+            --notes "Apple Silicon test build using the repository-pinned Chromium and LongView runtime. Ad-hoc signed, not notarized. Intended for immediate long-page UX/performance testing."
