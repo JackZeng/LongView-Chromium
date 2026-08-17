@@ -32,9 +32,16 @@ jobs:
           import hashlib
           from pathlib import Path
 
-          chunks = sorted(Path('.phase7-transport/chunks').glob('chunk*'))
-          if [path.name for path in chunks] != [f'chunk{index:02d}' for index in range(7)]:
-              raise SystemExit(f'unexpected Phase 7 chunk set: {[path.name for path in chunks]}')
+          root = Path('.phase7-transport/chunks')
+          names = [
+              'chunk00',
+              'chunk01a', 'chunk01b', 'chunk01c', 'chunk01d',
+              'chunk02', 'chunk03', 'chunk04', 'chunk05', 'chunk06',
+          ]
+          chunks = [root / name for name in names]
+          missing = [path.name for path in chunks if not path.is_file()]
+          if missing:
+              raise SystemExit(f'missing Phase 7 payload chunks: {missing}')
           encoded = b''.join(path.read_bytes() for path in chunks)
           archive = base64.b64decode(encoded, validate=True)
           digest = hashlib.sha256(archive).hexdigest()
