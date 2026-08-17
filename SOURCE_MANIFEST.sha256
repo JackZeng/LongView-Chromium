@@ -20,6 +20,7 @@ b6453e2e3f8450521b948dfcd7c077ce38d0e93f7d76e47efdd9018d825854fd  .github/workfl
 28bebf9039679411fe7a8531695d2f60de35bf9b813ea57d0889e6354aff2d70  .github/workflows/macos-blink-native-alpha-v4.yml
 b84fc68f8abf78663d0c3b2f3b70141d966af8bf2d1c356afa755e333abcc19c  .github/workflows/macos-blink-native-alpha-v5-xlarge.yml
 879bc1b9d980b5c3aa068361a61cc4ae8fe447fb986e1f3ab0438bd00812eea9  .github/workflows/macos-blink-native-alpha-v5.yml
+78991e5dd30330e7b9e98d7cb0b0f790032fd7284a9a1f09bd7544752937429c  .github/workflows/macos-blink-native-alpha-v6-xlarge.yml
 39b51e1e6302f5c7411bd3d4be8b13e6d7a5b11e0e4ea0cba2bf633ee705d6e9  .github/workflows/macos-blink-native-alpha-v6.yml
 d804f2402995a41add7f5a51e2868cadad9712d8d06018790696351d5b91d4ef  .github/workflows/macos-blink-native-alpha-xlarge.yml
 a8c4a6e3f9217a3e8c24b5bbaba05b74259e10729dc8aa0fe4cf5e7f4907d5f5  .github/workflows/macos-blink-native-alpha.yml
