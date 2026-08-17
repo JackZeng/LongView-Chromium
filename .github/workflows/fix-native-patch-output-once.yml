@@ -1,0 +1,60 @@
+name: fix-native-patch-output-once
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/fix-native-patch-output-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Export only the native behavior patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tools/install_blink_native_cold.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''                "third_party/blink/renderer/platform/runtime_enabled_features.json5",\n                "third_party/blink/renderer/core/dom/node.h",'''
+          new = '''                # The runtime feature is patch 0001. 0002 intentionally\n                # contains only the native Node/Element behavior so the series\n                # is reproducible whether 0001 was installed structurally or\n                # applied as a patch.\n                "third_party/blink/renderer/core/dom/node.h",'''
+          if old not in text:
+              raise SystemExit('patch-output path list changed unexpectedly')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          build = Path('tools/ci/build_macos_blink_native_alpha.sh')
+          body = build.read_text(encoding='utf-8')
+          marker = '# Behavior-only patch export is compared with patch 0002.\n'
+          if marker not in body:
+              body = body.replace('set -euo pipefail\n', 'set -euo pipefail\n\n' + marker, 1)
+              build.write_text(body, encoding='utf-8', newline='\n')
+          PY
+          rm .github/workflows/fix-native-patch-output-once.yml
+          python tools/generate_source_manifest.py
+      - name: Validate tools and bridge
+        shell: bash
+        run: |
+          python -m py_compile tools/install_blink_native_cold.py tools/longview_tools/native_cold_patch.py
+          node --test product/extension/tests/native-cold.test.mjs
+          python tools/validate_repository.py
+      - name: Commit corrected export contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: compare the behavior-only Blink native patch'
+          git push origin HEAD:agent/blink-native-cold-alpha
