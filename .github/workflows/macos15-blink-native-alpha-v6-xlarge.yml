@@ -1,0 +1,55 @@
+name: macos15-blink-native-alpha-v6-xlarge
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/macos15-blink-native-alpha-v6-xlarge.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos15-blink-native-alpha-v6-xlarge
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-xlarge
+    timeout-minutes: 360
+    env:
+      LONGVIEW_JOBS: "4"
+      NINJA_SUMMARIZE_BUILD: "1"
+      GOMA_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Verify Apple Silicon runner
+        run: test "$(uname -m)" = arm64
+      - name: Build complete Chromium and both native proofs
+        shell: bash
+        run: bash tools/ci/build_macos_blink_native_alpha_v6.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LongView-Chromium-macOS15-Blink-Native-Alpha-v6-xlarge
+          path: dist/macos-native-alpha-v4/**
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish fixed final-v6 prerelease
+        shell: bash
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          set -euo pipefail
+          tag='v0.4.0-blink-native-alpha.final-v6'
+          version="$(cat dist/macos-native-alpha-v4/VERSION.txt)"
+          gh release delete "$tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$tag" \
+            dist/macos-native-alpha-v4/LongView-Chromium-macOS-arm64-Blink-Native-Alpha.zip \
+            dist/macos-native-alpha-v4/SHA256SUMS.txt \
+            dist/macos-native-alpha-v4/README-FIRST.txt \
+            dist/macos-native-alpha-v4/VERSION.txt \
+            dist/macos-native-alpha-v4/proof/* \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "LongView Chromium $version" \
+            --notes "macOS 15 larger Apple Silicon full-source build with both native-COLD proofs."
