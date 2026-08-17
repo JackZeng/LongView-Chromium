@@ -2,6 +2,7 @@ name: refresh-source-manifest
 
 # This maintenance workflow is intentionally excluded from SOURCE_MANIFEST.sha256
 # so it can safely retrigger checks after an Actions-authored manifest commit.
+# Keep it content-neutral: it may change without invalidating the source manifest.
 on:
   push:
     branches: [main, "agent/**"]
@@ -13,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: source-manifest-${{ github.ref }}
+  group: source-manifest-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
