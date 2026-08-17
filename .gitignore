@@ -45,3 +45,6 @@ out/
 *.log
 tmp/
 .cache/
+_site/
+.longview-updater/
+*.cdx.json

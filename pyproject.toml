@@ -1,6 +1,6 @@
 [project]
 name = "longview-chromium-tools"
-version = "0.2.0"
+version = "0.3.0"
 description = "Bootstrap, build, run, measure, and probe LongView Chromium"
 requires-python = ">=3.11"
 

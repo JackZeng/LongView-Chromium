@@ -15,16 +15,29 @@ class OverlayTest(unittest.TestCase):
             src = workspace / "src"
             (repo / "chromium_overlay").mkdir(parents=True)
             (repo / "chromium_overlay" / "BUILD.gn").write_text("# test\n", encoding="utf-8")
+            engine = repo / "src" / "engine"
+            engine.mkdir(parents=True)
+            (engine / "README.md").write_text("engine\n", encoding="utf-8")
             target = src / "third_party/blink/renderer/platform"
             target.mkdir(parents=True)
             (target / "runtime_enabled_features.json5").write_text("{\n  data: [\n  ],\n}\n", encoding="utf-8")
             paths = Paths(repo=repo, workspace=workspace)
-            installed = install_overlay(paths, "0.2.0")
+            installed = install_overlay(paths, "1.0.0-rc.1")
             self.assertTrue((installed / "OVERLAY.json").is_file())
+            self.assertTrue((installed / "engine" / "README.md").is_file())
             self.assertTrue(install_blink_observability(paths))
             self.assertTrue((installed / "BLINK_OBSERVABILITY.json").is_file())
             self.assertTrue(remove_blink_observability(paths))
             self.assertTrue(remove_overlay(paths))
+
+    def test_missing_engine_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            (repo / "chromium_overlay").mkdir(parents=True)
+            paths = Paths(repo=repo, workspace=root / "workspace")
+            with self.assertRaises(FileNotFoundError):
+                install_overlay(paths, "1.0.0-rc.1")
 
 
 if __name__ == "__main__":

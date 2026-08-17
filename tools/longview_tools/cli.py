@@ -118,9 +118,9 @@ def run_evidence(paths: Paths, args: argparse.Namespace) -> None:
 
 def native_probe(paths: Paths, version: str, profile: str, output: str, force: bool) -> None:
     install_overlay(paths, version, force=force); install_blink_observability(paths)
-    for target in ("//longview:segment_policy_test", "//longview:blink_feature_probe"): build(paths, profile, output, target)
-    for executable in ("segment_policy_test", "blink_feature_probe"): run([built_target(paths.chromium_src, output, executable)], cwd=paths.chromium_src)
-    result = {"version": version, "chromiumSource": str(paths.chromium_src), "output": output, "targets": ["segment_policy_test", "blink_feature_probe"], "status": "passed"}
+    for target in ("//longview:segment_policy_test", "//longview:engine_contract_test", "//longview:blink_bridge_test", "//longview:blink_feature_probe"): build(paths, profile, output, target)
+    for executable in ("segment_policy_test", "engine_contract_test", "blink_bridge_test", "blink_feature_probe"): run([built_target(paths.chromium_src, output, executable)], cwd=paths.chromium_src)
+    result = {"version": version, "chromiumSource": str(paths.chromium_src), "output": output, "targets": ["segment_policy_test", "engine_contract_test", "blink_bridge_test", "blink_feature_probe"], "status": "passed"}
     paths.overlay_destination.mkdir(parents=True, exist_ok=True)
     (paths.overlay_destination / "NATIVE_PROBE_RESULT.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))

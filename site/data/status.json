@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-17T00:00:00Z",
+  "release": {
+    "version": "0.3.0",
+    "channel": "beta",
+    "readiness": "candidate",
+    "signedArtifacts": false
+  },
+  "engine": {
+    "phase": 6,
+    "featureFlag": "disabled by default",
+    "controllerContract": true,
+    "geometryCapsule": true,
+    "coldBackend": true,
+    "schedulerContract": true,
+    "blinkDerivedStateRelease": false
+  },
+  "evidence": {
+    "publishable": false,
+    "scales": [
+      {
+        "turns": 100,
+        "baselineP95": null,
+        "longviewP95": null,
+        "ratio": null,
+        "correctness": false
+      },
+      {
+        "turns": 500,
+        "baselineP95": null,
+        "longviewP95": null,
+        "ratio": null,
+        "correctness": false
+      },
+      {
+        "turns": 1000,
+        "baselineP95": null,
+        "longviewP95": null,
+        "ratio": null,
+        "correctness": false
+      },
+      {
+        "turns": 2000,
+        "baselineP95": null,
+        "longviewP95": null,
+        "ratio": null,
+        "correctness": false
+      }
+    ]
+  },
+  "security": {
+    "chromiumVersion": "151.0.7922.77",
+    "chromiumCommit": "ff37cfca210138f2a40b843b4a8195ab7e4fc7ff",
+    "pinCurrent": false,
+    "lastChecked": null
+  },
+  "gates": [
+    {
+      "name": "Repository and policy validation",
+      "status": "pass",
+      "detail": "Cross-platform unit, manifest, C++ policy, and release-tool checks."
+    },
+    {
+      "name": "Blink derived-state release",
+      "status": "pending",
+      "detail": "Requires full pinned Chromium builds and native compatibility tests."
+    },
+    {
+      "name": "Controlled Mac and Windows evidence",
+      "status": "pending",
+      "detail": "Physical-machine 100/500/1000/2000-turn bundles are required."
+    },
+    {
+      "name": "Platform trust",
+      "status": "blocked",
+      "detail": "Apple notarization and Windows Authenticode credentials are not installed."
+    }
+  ]
+}

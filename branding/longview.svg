@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LongView Chromium logo">
+  <rect width="512" height="512" rx="112" fill="#111827"/>
+  <path d="M126 116v280h206v-64H198V116z" fill="#f9fafb"/>
+  <path d="M246 116h140L316 256z" fill="#60a5fa"/>
+</svg>

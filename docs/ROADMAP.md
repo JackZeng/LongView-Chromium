@@ -2,11 +2,11 @@
 
 ## Phase 0 — reproducible baseline
 
-- [x] pin Chromium;
+- [x] pin Chromium to an exact stable revision;
 - [x] document checkout/build workflow;
-- [x] deterministic long-conversation fixture;
+- [x] deterministic long-conversation fixtures;
 - [x] source validation across Linux, macOS, and Windows;
-- [ ] record full native macOS/Windows baseline evidence on controlled hardware.
+- [ ] publish controlled physical macOS/Windows baseline bundles.
 
 ## Phase 1 — runnable working-set prototype
 
@@ -14,62 +14,66 @@
 - [x] Manifest V3 runtime;
 - [x] explicit and site-specific adapters;
 - [x] HOT/WARM/COLD/PINNED lifecycle;
-- [x] focus/selection/find/print materialization hooks;
-- [x] diagnostics and controls;
-- [x] deterministic benchmark automation.
+- [x] focus, selection, find, print, streaming, resize, and mutation handling;
+- [x] controls, diagnostics, and deterministic benchmark automation.
 
 ## Phase 2 — evidence and policy hardening
 
-- [x] dependency-free CDP metrics/trace driver;
-- [x] 100/500/1000/2000 scale campaign;
-- [x] scaling exponent analysis;
+- [x] dependency-free CDP metrics and trace driver;
+- [x] 100/500/1000/2000-turn campaign;
+- [x] scaling-exponent analysis;
 - [x] correctness and regression gates;
-- [x] conservative native eligibility policy;
-- [x] demotion hysteresis and anti-thrashing;
-- [x] installable Chromium policy target;
-- [x] disabled-by-default Blink feature candidate;
-- [ ] collect controlled macOS/Windows evidence artifacts.
+- [x] conservative native eligibility, hysteresis, indexing, and anti-thrashing;
+- [x] pinned Chrome-for-Testing smoke matrix with artifact output;
+- [ ] publish controlled physical macOS/Windows result bundles.
 
-## Phase 3 — native observability
+## Phase 3 — native lifecycle controller
 
-- [ ] compile patch 0001 on the exact pin across macOS and Windows;
-- [ ] document-scoped LongPageController;
-- [ ] conservative candidate discovery only;
-- [ ] trace/UMA for counts, transitions, eligibility, and faults;
-- [ ] native web tests for geometry, focus, selection, anchors, accessibility, screenshot, print, and mutation;
-- [ ] no rendering behavior change in the first observability patch.
+- [x] disabled-by-default Blink feature gate;
+- [x] dependency-free document-controller contract;
+- [x] explicit materialization reasons;
+- [x] transition and released-byte statistics;
+- [x] Chromium GN targets for engine and bridge probes;
+- [ ] connect a real document-scoped owner in Blink;
+- [ ] add native web tests and Perfetto/UMA events in the pinned source tree.
 
-## Phase 4 — display-lock backed cold experiment
+## Phase 4 — display-lock-backed cold state
 
-- [ ] connect eligible segments to existing Blink display-lock/content-visibility state;
-- [ ] materialize before observable operations;
-- [ ] preserve scroll geometry and identity;
-- [ ] pin thrashing segments;
-- [ ] measure style/layout/paint/raster and blanking;
-- [ ] default feature remains off.
+- [x] cold-backend interface and Blink adapter contract;
+- [x] freeze/thaw accounting and failure behavior;
+- [x] correctness pins for focus, selection, accessibility, editability, media, and overlays;
+- [ ] implement the Blink delegate using display lock and rendering lifecycle primitives;
+- [ ] prove geometry/identity preservation and no blanking in full builds.
 
-## Phase 5 — scheduler/compositor coordination
+## Phase 5 — scheduler and compositor coordination
 
-Only if traces prove it is needed:
-
-- [ ] velocity-aware warm range owned jointly with scheduler/compositor;
-- [ ] raster priority for predicted viewport;
-- [ ] cold observer and background work deprioritization;
-- [ ] checkerboard and input-latency guardrails.
+- [x] velocity-aware predicted viewport contract;
+- [x] bounded WARM set and work-priority contract;
+- [x] HOT/PINNED input-critical and WARM raster-soon priorities;
+- [ ] connect priorities to Blink scheduler, raster, and compositor ownership;
+- [ ] establish checkerboard and input-latency guardrails from traces.
 
 ## Phase 6 — compact retained state
 
-Only if retained layout state remains a measured limit:
-
-- [ ] geometry capsule prototype;
-- [ ] text/anchor/find index;
-- [ ] compact accessibility representation;
-- [ ] compositor placeholder geometry;
-- [ ] memory scaling evidence.
+- [x] Geometry Capsule data model;
+- [x] block geometry, style/content generations, anchors, and text digest;
+- [x] mutation invalidation and demand materialization contract;
+- [ ] replace estimated released bytes with real retained-state measurement;
+- [ ] implement compact accessibility and compositor placeholder representations;
+- [ ] prove sublinear memory scaling at 1000/2000/5000 turns.
 
 ## Phase 7 — product release
 
-- [ ] signed/notarized macOS and Windows packages;
-- [ ] update channel following supported Chromium security versions;
-- [ ] crash reporting, rollback, privacy, and accessibility review;
-- [ ] public benchmark corpus and evidence dashboard.
+- [x] deterministic portable packaging;
+- [x] release manifest, signed feed, staged rollout, updater, health check, and rollback tooling;
+- [x] CycloneDX SBOM generation;
+- [x] macOS signing/notarization and Windows signing entrypoints;
+- [x] security-pin watcher and documented Chromium update cadence;
+- [x] privacy, accessibility, rollback, and crash-reporting contracts;
+- [x] static public status/evidence dashboard and Pages workflow;
+- [x] self-hosted physical evidence and release-candidate workflows;
+- [ ] install external Apple and Windows signing credentials;
+- [ ] publish signed/notarized stable artifacts;
+- [ ] enable GitHub Pages in repository settings;
+- [ ] configure an opt-in crash service after privacy review;
+- [ ] promote to stable only after every acceptance gate passes.

@@ -14,6 +14,46 @@ executable("segment_policy_test") {
   deps = [ ":segment_policy" ]
 }
 
+config("engine_include") {
+  include_dirs = [ "engine/include" ]
+}
+
+source_set("engine_contract") {
+  sources = [
+    "engine/include/longview/engine/cold_backend.h",
+    "engine/include/longview/engine/geometry_capsule.h",
+    "engine/include/longview/engine/long_page_controller.h",
+    "engine/include/longview/engine/scheduler.h",
+    "engine/include/longview/engine/types.h",
+    "engine/src/cold_backend.cc",
+    "engine/src/geometry_capsule.cc",
+    "engine/src/long_page_controller.cc",
+    "engine/src/scheduler.cc",
+  ]
+  public_configs = [ ":engine_include" ]
+}
+
+source_set("blink_bridge") {
+  sources = [
+    "longview/blink/blink_cold_backend.cc",
+    "longview/blink/blink_cold_backend.h",
+  ]
+  deps = [ ":engine_contract" ]
+}
+
+executable("engine_contract_test") {
+  sources = [ "engine/tests/engine_test.cc" ]
+  deps = [ ":engine_contract" ]
+}
+
+executable("blink_bridge_test") {
+  sources = [ "longview/blink/tests/blink_cold_backend_test.cc" ]
+  deps = [
+    ":blink_bridge",
+    ":engine_contract",
+  ]
+}
+
 executable("blink_feature_probe") {
   sources = [ "blink_feature_probe.cc" ]
   deps = [ "//third_party/blink/renderer/platform:platform" ]
