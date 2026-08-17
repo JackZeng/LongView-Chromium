@@ -97,8 +97,8 @@ jobs:
           print('Applied LongView 0.3.0 Phase 7 source payload')
           PY
           rm -rf .phase7-transport
-          python tools/generate_source_manifest.py
           cp "$RUNNER_TEMP/phase7-validation.yml" .github/workflows/phase7-validation.yml
+          python tools/generate_source_manifest.py
       - name: Validate repository and JavaScript
         shell: bash
         run: |
@@ -127,6 +127,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f .github/workflows/phase7-validation.yml
+          python tools/generate_source_manifest.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
