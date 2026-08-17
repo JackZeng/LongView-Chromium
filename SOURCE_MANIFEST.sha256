@@ -18,6 +18,7 @@ d804f2402995a41add7f5a51e2868cadad9712d8d06018790696351d5b91d4ef  .github/workfl
 a8c4a6e3f9217a3e8c24b5bbaba05b74259e10729dc8aa0fe4cf5e7f4907d5f5  .github/workflows/macos-blink-native-alpha.yml
 4d2dd9a27c59d5417f0c0e589e507751b165d7db1afcaee17c5f1f8f196222a6  .github/workflows/macos-native-capacity.yml
 2c1d5c06efcf01d49f3edfa27b9b87d22fbd00781a1706981341910152d24850  .github/workflows/native-alpha-build-status.yml
+0ef88754e6efd0c3a8ce3d5cc0e3531bcb889337e2cf5a39351cfefb07e4b728  .github/workflows/native-alpha-final-promotion-gate.yml
 4efabf265a50d0881743c9dbd917ccd6f18fb867b4a0fe787154a36034431e97  .github/workflows/native-alpha-manifest-refresh.yml
 e7e3e21447a2f902ea1621dc1533f70f9c25fe381eb55760cdb5fc0d136aa46f  .github/workflows/native-alpha-promotion-gate.yml
 6a24c5369a37969067f82460c4e1ae6e3382fc233e3339258bc824b2da4d3fa2  .github/workflows/native-alpha-v2-build-status.yml
