@@ -26,6 +26,9 @@ jobs:
           cd chromium-sparse
           git init -q
           git remote add origin https://chromium.googlesource.com/chromium/src.git
+          git config extensions.partialClone origin
+          git config remote.origin.promisor true
+          git config remote.origin.partialclonefilter blob:none
           git config core.sparseCheckout true
           cat > .git/info/sparse-checkout <<'EOF'
           /third_party/blink/renderer/core/BUILD.gn
@@ -46,7 +49,7 @@ jobs:
           /third_party/blink/renderer/core/css/style_engine.cc
           /third_party/blink/renderer/platform/runtime_enabled_features.json5
           EOF
-          git fetch --depth=1 origin "$commit"
+          git fetch --depth=1 --filter=blob:none origin "$commit"
           git checkout -q FETCH_HEAD
           test "$(git rev-parse HEAD)" = "$commit"
           printf '%s\n' "$commit" > PINNED_COMMIT.txt
