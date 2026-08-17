@@ -7,6 +7,7 @@ d6450f4eca3b9d48d23bb5bc8ba3d60d56d03795377d3c38bb752ef83fa4a992  .github/pull_r
 665cf641e347fdd24c38108ccda622a3e69a43b15e5522fda1b4d4cfeee4e379  .github/workflows/bump-native-alpha-version-once.yml
 d848cc5969582e8446dcd7d077461155df6864dfe83b8e6889c5f4d4b1d416f0  .github/workflows/ci.yml
 ebf5206844c1c7d98d6edf2f62ba040acf0b623024eea65a65115ac64fb60c07  .github/workflows/evidence-smoke.yml
+8c36090461e5bc206912e0e39d24d8cb5e93f97a4b1dcb44fdff04621b741cbb  .github/workflows/fix-native-patch-output-once.yml
 6baf89a568e4da577083800085cc32ef9d79e9cec83e696e14718edbe5ac62d6  .github/workflows/full-evidence.yml
 93fa0c24c9fa278aa612a2152cd5c40326923663f05bef36791e331d4ba00b0c  .github/workflows/generate-native-cold-patch.yml
 37ef805060093b40ec5bad6ac48d870e713514cd4232e25acf823db4f3bdf19a  .github/workflows/macos-blink-native-alpha-v2.yml
