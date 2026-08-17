@@ -52,6 +52,9 @@ jobs:
           print(f'Verified Phase 7 payload: {len(archive)} bytes, {digest}')
           PY
           tar -xzf /tmp/phase7-payload.tar.gz -C "$RUNNER_TEMP/phase7"
+          # GitHub's workflow token cannot create workflow files. The connector
+          # installs those separately after the tested source commit lands.
+          rm -rf "$RUNNER_TEMP/phase7/payload/.github/workflows"
           python - "$GITHUB_WORKSPACE" "$RUNNER_TEMP/phase7/payload" "$RUNNER_TEMP/phase7/apply.py" <<'PY'
           from pathlib import Path
           import runpy
@@ -93,7 +96,6 @@ jobs:
           print('Applied LongView 0.3.0 Phase 7 source payload')
           PY
           rm -rf .phase7-transport
-          rm .github/workflows/phase7-bootstrap-once.yml
           python tools/generate_source_manifest.py
       - name: Validate repository and JavaScript
         shell: bash
