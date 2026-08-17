@@ -1,80 +1,68 @@
 # Implementation status
 
-## Delivered in v0.2
+## Delivered in v0.3.0
 
-### Native Chromium workflow
+### Working browser and evidence
 
-- exact Chromium 151.0.7922.77 pin and commit;
-- depot_tools checkout/synchronization;
-- baseline, dev, and release GN profiles;
-- native Chromium build/run/package commands;
-- overlay and pinned Blink patch installers;
-- one-command native policy + Blink feature probe build/run;
-- persistent self-hosted macOS/Windows probe workflow.
-
-### Browser runtime
-
+- pinned native Chromium build/run/package workflow;
 - ChatGPT, Claude, Gemini, explicit-root, and generic adapters;
-- HOT/WARM/COLD/PINNED lifecycle;
-- scroll-velocity prediction;
-- asymmetric warming;
-- ordered segment range lookup;
-- focus/selection pinning;
-- find, copy, print, and beforematch materialization;
-- mutation/resize rescanning;
-- popup, settings, diagnostics overlay.
+- HOT/WARM/COLD/PINNED runtime using Chromium `content-visibility`;
+- focus, selection, find, print, streaming, resize, and mutation handling;
+- deterministic 10–5000-turn fixtures;
+- dependency-free CDP driver, metrics, traces, scaling analysis, and gates;
+- stable pinned-browser inline smoke matrix on GitHub-hosted CI.
 
-### Evidence
+### Engine lifecycle contract
 
-- deterministic 10–5000 turn fixture;
-- streaming, observers, code, tables, images, and distant mutation;
-- dependency-free CDP driver;
-- performance metrics, DOM counters, and trace capture;
-- baseline/LongView campaign matrices;
-- scaling exponent analysis;
-- JSON/CSV/Markdown output;
-- correctness and regression gates;
-- GitHub browser smoke workflow.
+- C++20 `LongPageController`;
+- Geometry Capsules with block geometry, generations, anchors, and text digest;
+- pluggable `ColdBackend` freeze/thaw interface;
+- `BlinkColdBackend` adapter through an explicit derived-state delegate;
+- HOT/WARM/COLD/PINNED transitions;
+- velocity prediction, WARM bounds, hysteresis, and anti-thrashing;
+- correctness-driven pinning and explicit materialization reasons;
+- work-priority contract for input, raster-soon, normal, background, and suspended tasks;
+- standalone CMake/CTest validation on Linux, macOS, and Windows;
+- Chromium GN targets for policy, engine, bridge, and Blink feature probes.
 
-### Native policy model
+### Phase 7 release engineering
 
-- conservative eligibility decisions;
-- exclusion reasons;
-- direction/speed working set calculation;
-- HOT/WARM demotion hysteresis;
-- materialization reason telemetry;
-- anti-thrashing pinning;
-- ordered segment index;
-- Chromium-installable `//longview:segment_policy_test` target;
-- candidate `blink::features::kLongViewSegmentLifecycle` gate, disabled by default.
+- deterministic portable ZIP creation;
+- canonical update manifests and channel feeds;
+- SHA-256 and optional OpenSSL signatures;
+- HTTPS-only artifact staging and deterministic rollout buckets;
+- safe extraction, atomic installation, health checks, and rollback;
+- CycloneDX 1.5 SBOM generation;
+- platform packaging scripts with optional macOS codesign/notarization and Windows Authenticode;
+- daily Chromium Stable pin watcher;
+- self-hosted controlled-evidence and release-candidate workflows;
+- privacy, accessibility, crash-reporting, security-update, and release contracts;
+- static public status/evidence dashboard and GitHub Pages workflow.
 
-## Not delivered
+## Explicitly not yet claimed
 
-The following are not claimed:
-
-- a compiled full Chromium application artifact in this repository;
-- signed/notarized macOS or Windows packages;
-- cold LayoutObject destruction;
-- paint property or display-item eviction;
+- real Blink LayoutObject or paint-property eviction;
+- a production Blink delegate that releases derived state;
+- compact native accessibility state;
 - compositor placeholder layers;
-- compact accessibility representation;
-- Geometry Capsules;
-- native segment discovery in Blink;
-- correct handling of all web-platform edge cases;
-- automatic Chromium security updates.
+- native compatibility coverage for every geometry/focus/find/selection/print/screenshot edge case;
+- controlled physical-machine performance evidence already published;
+- signed/notarized stable macOS and Windows artifacts;
+- an enabled public update channel;
+- an operating crash-upload service;
+- automatic stable promotion.
 
-## Current boundary
+## Architectural boundary
 
-The extension/runtime is a useful product prototype and experiment driver. The native model and overlay are a policy specification plus an integration probe. Patch 0001 is observability scaffolding only.
+`src/engine` is the reviewable lifecycle and retained-state contract. `BlinkColdBackend` deliberately delegates the actual release/restore operation to a Blink-owned implementation. This prevents the policy layer from depending on Blink object lifetimes and makes it possible to test invariants without a multi-hour Chromium build.
 
-The next Chromium patch is allowed to add document-scoped candidate discovery and trace events. It is not allowed to alter rendering behavior until native web tests cover the compatibility matrix.
+The production feature remains disabled by default. Stable promotion requires the full checklist in `docs/PHASE7_ACCEPTANCE.md`; a passing engine contract alone is not sufficient.
 
-## Required external verification
+## External verification still required
 
-Before declaring a native milestone complete:
-
-1. Run `python3 tools/longview.py native-probe --force` on macOS and Windows against the exact pin.
-2. Run the evidence campaign on representative 60 Hz and 120 Hz systems.
-3. Capture traces at 2000 turns.
-4. Record GPU, display refresh, power mode, Chromium commit, and LongView commit.
-5. Run native web tests for geometry, focus, selection, anchors, accessibility, print, screenshot, and distant mutation.
+1. Run the complete native probes on the exact pin on physical Apple Silicon and Windows hosts.
+2. Implement and validate the Blink derived-state delegate.
+3. Run native compatibility tests for geometry, focus, selection, anchors, accessibility, screenshot, print, and mutation.
+4. Publish controlled 100/500/1000/2000-turn evidence and 2000-turn traces.
+5. Supply Apple notarization and Windows signing credentials.
+6. Publish signed artifacts, SBOM, release manifest, and rollback-tested updater feed.

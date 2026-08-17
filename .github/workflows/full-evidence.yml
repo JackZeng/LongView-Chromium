@@ -1,0 +1,57 @@
+name: full-native-evidence
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Repetitions per variant
+        required: true
+        default: "5"
+      duration:
+        description: Scroll duration in milliseconds
+        required: true
+        default: "9000"
+permissions:
+  contents: read
+jobs:
+  evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: [self-hosted, longview-macos]
+            label: macos-physical
+          - os: [self-hosted, longview-windows]
+            label: windows-physical
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 480
+    env:
+      LONGVIEW_WORKSPACE: ${{ github.workspace }}/.longview-native
+      PYTHONPATH: ${{ github.workspace }}/tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Fetch, patch, and build pinned Chromium
+        run: |
+          python tools/longview.py fetch
+          python tools/longview.py install-overlay --force
+          python tools/longview.py build --profile longview-release
+      - name: Run controlled evidence campaign
+        shell: bash
+        run: |
+          executable=$(python tools/release/locate_build.py --workspace "$LONGVIEW_WORKSPACE" --output LongView --kind binary)
+          node benchmarks/runner/campaign.mjs \
+            --executable "$executable" \
+            --turns 100,500,1000,2000 \
+            --runs "${{ inputs.runs }}" \
+            --duration "${{ inputs.duration }}" \
+            --stream --stress --trace --enforce \
+            --label "${{ matrix.label }}" \
+            --outputDir "benchmark-results/${{ matrix.label }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longview-evidence-${{ matrix.label }}
+          path: benchmark-results/${{ matrix.label }}/**
+          if-no-files-found: error

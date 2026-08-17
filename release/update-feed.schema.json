@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://longview.invalid/schemas/update-feed.schema.json",
+  "title": "LongView Chromium update feed",
+  "type": "object",
+  "required": ["schemaVersion", "product", "channel", "generatedAt", "releases"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "product": {"const": "LongView Chromium"},
+    "channel": {"type": "string"},
+    "generatedAt": {"type": "string"},
+    "releases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["version", "manifestUrl", "manifestSha256", "rolloutPercent"],
+        "properties": {
+          "version": {"type": "string"},
+          "manifestUrl": {"type": "string", "pattern": "^https://"},
+          "manifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "rolloutPercent": {"type": "integer", "minimum": 0, "maximum": 100}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

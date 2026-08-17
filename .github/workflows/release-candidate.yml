@@ -1,0 +1,79 @@
+name: release-candidate
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer release candidate, for example 1.0.0-rc.1
+        required: true
+      publish_draft:
+        description: Create or update a draft GitHub release
+        type: boolean
+        default: true
+permissions:
+  contents: write
+jobs:
+  macos:
+    runs-on: [self-hosted, longview-macos]
+    timeout-minutes: 480
+    env:
+      LONGVIEW_WORKSPACE: ${{ github.workspace }}/.longview-native
+      LONGVIEW_VERSION: ${{ inputs.version }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release Chromium
+        run: |
+          python3 tools/longview.py fetch
+          python3 tools/longview.py install-overlay --force
+          python3 tools/longview.py build --profile longview-release
+      - name: Sign, notarize, and package
+        run: |
+          export LONGVIEW_APP="$(python3 tools/release/locate_build.py --workspace "$LONGVIEW_WORKSPACE" --output LongView --kind app)"
+          release/macos/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longview-macos-${{ inputs.version }}
+          path: dist/macos/**
+  windows:
+    runs-on: [self-hosted, longview-windows]
+    timeout-minutes: 480
+    env:
+      LONGVIEW_WORKSPACE: ${{ github.workspace }}/.longview-native
+      WINDOWS_SIGNING_CERT_THUMBPRINT: ${{ secrets.WINDOWS_SIGNING_CERT_THUMBPRINT }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release Chromium
+        shell: pwsh
+        run: |
+          python tools/longview.py fetch
+          python tools/longview.py install-overlay --force
+          python tools/longview.py build --profile longview-release
+      - name: Sign and package
+        shell: pwsh
+        run: |
+          $source = python tools/release/locate_build.py --workspace $env:LONGVIEW_WORKSPACE --output LongView --kind distribution
+          ./release/windows/package.ps1 -SourceDirectory $source -Version "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longview-windows-${{ inputs.version }}
+          path: dist/windows/**
+  draft:
+    if: inputs.publish_draft
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Generate SBOM
+        run: python tools/release/generate_sbom.py --version "${{ inputs.version }}" --output "dist/LongView-${{ inputs.version }}.cdx.json"
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" dist/**/* \
+            --draft \
+            --title "LongView Chromium ${{ inputs.version }}" \
+            --notes "Release candidate. Stable promotion requires signed/notarized artifacts, controlled evidence, current Chromium pin, and all Phase 7 gates."

@@ -1,0 +1,64 @@
+name: phase7-validation
+on:
+  push:
+    branches: [main, "agent/**"]
+    paths:
+      - "src/engine/**"
+      - "tools/release/**"
+      - "release/**"
+      - "branding/**"
+      - "site/**"
+      - "docs/PHASE7_ACCEPTANCE.md"
+      - "docs/RELEASE_ENGINEERING.md"
+      - ".github/workflows/phase7-validation.yml"
+      - ".github/workflows/manifest-refresh.yml"
+  pull_request:
+    paths:
+      - "src/engine/**"
+      - "tools/release/**"
+      - "release/**"
+      - "branding/**"
+      - "site/**"
+      - "docs/PHASE7_ACCEPTANCE.md"
+      - "docs/RELEASE_ENGINEERING.md"
+      - ".github/workflows/phase7-validation.yml"
+      - ".github/workflows/manifest-refresh.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: phase7-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Configure engine contract
+        run: cmake -S src/engine -B build/engine -DCMAKE_BUILD_TYPE=Release
+      - name: Build engine contract
+        run: cmake --build build/engine --config Release --parallel 2
+      - name: Test engine contract
+        run: ctest --test-dir build/engine -C Release --output-on-failure
+      - name: Test release and updater tooling
+        shell: bash
+        run: PYTHONPATH=tools/release python -m unittest discover -s tools/release -p 'test_*.py' -v
+      - name: Compile release tooling
+        run: python -m compileall -q tools/release
+      - name: Validate JSON and static site
+        shell: bash
+        run: |
+          python -m json.tool branding/product.json >/dev/null
+          python -m json.tool release/update-feed.schema.json >/dev/null
+          python -m json.tool release/channels/stable.json >/dev/null
+          python -m json.tool site/data/status.json >/dev/null
+          test -s site/index.html && test -s site/app.js && test -s site/style.css
+      - name: Generate SBOM smoke
+        shell: bash
+        run: python tools/release/generate_sbom.py --version "$(cat VERSION)" --output build/longview-sbom.json

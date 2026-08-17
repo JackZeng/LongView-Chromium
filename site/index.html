@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="LongView Chromium release, security, and performance status">
+  <title>LongView Chromium — Status</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="brand" aria-label="LongView Chromium">
+      <img src="../branding/longview.svg" alt="" width="44" height="44">
+      <div><strong>LongView Chromium</strong><span>Release & evidence status</span></div>
+    </div>
+    <nav aria-label="Primary">
+      <a href="#release">Release</a><a href="#engine">Engine</a><a href="#evidence">Evidence</a><a href="#security">Security</a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">WORKING-SET BROWSER</p>
+      <h1 id="hero-title">Fast pages, even when the document is enormous.</h1>
+      <p class="lede">LongView is a native Chromium distribution that keeps the active viewport fully interactive while reducing work retained by distant page segments.</p>
+      <div class="hero-actions"><a class="button" href="https://github.com/JackZeng/LongView-Chromium">Source repository</a><a class="button secondary" href="#release">View release readiness</a></div>
+    </section>
+
+    <section class="summary" aria-live="polite" aria-busy="true" id="summary"></section>
+
+    <section id="release" class="panel">
+      <div class="section-heading"><div><p class="eyebrow">PHASE 7</p><h2>Release readiness</h2></div><span id="release-badge" class="badge">Loading</span></div>
+      <div id="release-gates" class="gate-grid"></div>
+    </section>
+
+    <section id="engine" class="panel">
+      <div class="section-heading"><div><p class="eyebrow">ENGINE</p><h2>Lifecycle architecture</h2></div></div>
+      <div class="lifecycle" role="list" aria-label="Segment lifecycle states">
+        <article role="listitem"><span class="state hot">HOT</span><h3>Active viewport</h3><p>Full layout, paint, interaction, focus, selection, and accessibility.</p></article>
+        <article role="listitem"><span class="state warm">WARM</span><h3>Predicted viewport</h3><p>Prepared ahead of scroll direction with bounded raster and observer priority.</p></article>
+        <article role="listitem"><span class="state cold">COLD</span><h3>Distant content</h3><p>Geometry capsule retained while eligible derived state is released by the backend.</p></article>
+        <article role="listitem"><span class="state pinned">PINNED</span><h3>Correctness first</h3><p>Forced materialization for focus, find, selection, accessibility, mutation, print, and screenshot.</p></article>
+      </div>
+      <div id="engine-metrics" class="metric-grid"></div>
+    </section>
+
+    <section id="evidence" class="panel">
+      <div class="section-heading"><div><p class="eyebrow">EVIDENCE</p><h2>Performance campaign</h2></div></div>
+      <p class="muted">Published numbers are accepted only when baseline and LongView use the same pinned browser executable, hardware, display mode, and fixture.</p>
+      <div class="table-wrap"><table><thead><tr><th>Scale</th><th>Baseline p95</th><th>LongView p95</th><th>Ratio</th><th>Correctness</th></tr></thead><tbody id="evidence-table"></tbody></table></div>
+    </section>
+
+    <section id="security" class="panel">
+      <div class="section-heading"><div><p class="eyebrow">SECURITY</p><h2>Chromium support state</h2></div><span id="security-badge" class="badge">Loading</span></div>
+      <div id="security-details" class="metric-grid"></div>
+      <p class="muted">The dashboard contains no analytics and loads no third-party scripts. Update checks disclose product, channel, version, platform, and architecture only.</p>
+    </section>
+  </main>
+  <footer><span>LongView-specific code is BSD-3-Clause.</span><span id="generated-at"></span></footer>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

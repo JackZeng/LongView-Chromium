@@ -1,23 +1,18 @@
 # LongView Chromium
 
-**A native Chromium distribution and rendering-policy research project for extremely long, dynamic web pages.**
+**A native Chromium distribution and rendering-lifecycle project for extremely long, dynamic web pages.**
 
-LongView aims to make scrolling cost depend primarily on the visible working set instead of the total size of a document. The initial workloads are long AI conversations, documentation, logs, notebooks, forums, feeds, and large rendered Markdown pages.
+LongView's goal is to make scrolling and interaction cost follow the visible working set rather than total document complexity. Its first workloads are long AI conversations, documentation, logs, notebooks, forums, feeds, and large rendered Markdown pages.
 
-## Status: v0.2.0 evidence and native-policy milestone
+## Status: v0.3.0 Phase 7 release-candidate infrastructure
 
-LongView is built from a pinned Chromium checkout; it is not an Electron shell. The browser currently loads a Manifest V3 runtime into the native Chromium executable to validate the HOT/WARM/COLD/PINNED policy on real pages. The same policy now has a dependency-free C++20 implementation, an installable `//longview` Chromium target, and a disabled-by-default Blink observability feature candidate.
+LongView is built from a pinned Chromium checkout; it is not an Electron shell. The repository now contains three layers:
 
-v0.2 adds the evidence campaign needed before invasive Blink changes:
+1. a working Manifest V3 runtime that applies HOT/WARM/COLD/PINNED behavior to real pages using Chromium's existing `content-visibility` machinery;
+2. a dependency-free C++20 engine contract covering segment lifecycle, Geometry Capsules, cold-backend behavior, materialization, anti-thrashing, and work priorities;
+3. release engineering for deterministic packages, signed update manifests, staged rollout, atomic installation and rollback, SBOM generation, platform-signing entrypoints, security-pin monitoring, and a public status dashboard.
 
-- baseline and LongView runs at 100/500/1000/2000 turns;
-- CDP performance metrics and DOM counters;
-- optional Chromium JSON traces suitable for Perfetto;
-- JSON, CSV, and Markdown campaign reports;
-- log-log scaling exponents, not just one-point speedup ratios;
-- explicit correctness and regression gates;
-- native policy eligibility, hysteresis, segment indexing, materialization telemetry, and anti-thrashing;
-- a clean-source manifest that rejects bootstrap transport artifacts.
+The v0.3 engine contract is deliberately separated from Blink through `ColdBackend`. `BlinkColdBackend` is the integration seam through which a document-scoped Blink owner can release and restore derived layout, paint, raster, and accessibility state. The interface and tests exist; full Blink derived-state release is still guarded by the disabled-by-default feature flag and must be validated in complete pinned Chromium builds before it can be enabled.
 
 ## Core model
 
@@ -28,7 +23,13 @@ Far from the active working set        COLD
 Observable API or user access          materialize, record reason, prevent thrash
 ```
 
-The browser runtime uses Chromium's existing `content-visibility` machinery. It does not remove framework-owned DOM nodes or claim that cold LayoutObjects, paint state, or accessibility state have already been evicted.
+The target invariant is:
+
+```text
+scrolling cost ≈ O(active working set)
+not
+scrolling cost ≈ O(total document complexity)
+```
 
 ## Pinned Chromium
 
@@ -38,11 +39,11 @@ Commit   ff37cfca210138f2a40b843b4a8195ab7e4fc7ff
 Channel  stable
 ```
 
-All baseline and LongView comparisons must use the same executable and pinned revision.
+Every baseline/LongView comparison must use the same executable and exact upstream revision.
 
 ## Build and run
 
-Prepare at least 120 GiB of free disk space for a practical Chromium development workspace.
+A Chromium development checkout normally needs at least 120 GiB of free storage.
 
 ```bash
 python3 tools/longview.py doctor
@@ -51,34 +52,42 @@ python3 tools/longview.py build --profile longview-dev
 python3 tools/longview.py run https://chatgpt.com/
 ```
 
-Run the same browser without LongView:
+Run an identical baseline without LongView:
 
 ```bash
 python3 tools/longview.py run --baseline https://chatgpt.com/
 ```
 
-## Native policy and Blink feature probes
+## Engine and Chromium probes
 
-After the pinned checkout exists, one command installs the tested policy, applies the disabled Blink feature gate, builds both probes with Chromium's toolchain, and executes them:
+The engine contract can be tested without a full Chromium checkout:
+
+```bash
+cmake -S src/engine -B build/engine -DCMAKE_BUILD_TYPE=Release
+cmake --build build/engine --parallel 2
+ctest --test-dir build/engine --output-on-failure
+```
+
+With the pinned Chromium checkout available, install the overlay and compile the Chromium-native probes:
 
 ```bash
 python3 tools/longview.py native-probe --force
 ```
 
-Equivalent manual steps are:
+The native probe builds:
 
-```bash
-python3 tools/longview.py install-overlay --force
-python3 tools/longview.py install-blink-observability
-python3 tools/longview.py build --target //longview:segment_policy_test
-python3 tools/longview.py build --target //longview:blink_feature_probe
+```text
+//longview:segment_policy_test
+//longview:engine_contract_test
+//longview:blink_bridge_test
+//longview:blink_feature_probe
 ```
 
-The feature is `blink::features::kLongViewSegmentLifecycle` and remains disabled by default. Patch `0001` adds only the gate and a compile/runtime probe; it does not discover segments or discard rendering state. Full pinned macOS and Windows probe runs remain required before patch `0002`.
+The Blink feature remains disabled by default.
 
 ## Evidence campaign
 
-The runner is dependency-free and drives the exact Chromium executable through CDP. Node.js 22 or newer is required. Run the standard matrix:
+The dependency-free CDP runner records frame-time distributions, long tasks, DOM scale, heap use, style/layout/script/task work, LongView states, correctness probes, and optional Perfetto-compatible Chromium traces.
 
 ```bash
 python3 tools/longview.py evidence \
@@ -88,57 +97,62 @@ python3 tools/longview.py evidence \
   --stress \
   --stream \
   --trace \
-  --output-dir benchmark-results/mac-m4-2026-08-16
+  --output-dir benchmark-results/mac-m4
 ```
 
-The result directory contains:
+GitHub-hosted smoke tests use an inline deterministic fixture. Publishable performance evidence still requires controlled physical Apple Silicon and Windows machines, stable power/display settings, and the same pinned executable for both variants.
 
-```text
-campaign.json       machine-readable campaign and scaling analysis
-campaign.csv        compact comparison table
-REPORT.md           human-readable findings and gate status
-<turns>/baseline.json
-<turns>/longview.json
-<largest-turns>/traces-*/  optional Chromium trace files (`--trace-all` captures every scale)
+## Release engineering
+
+Validate Phase 7 tooling:
+
+```bash
+PYTHONPATH=tools/release python3 -m unittest discover -s tools/release -p 'test_*.py' -v
+python3 tools/release/generate_sbom.py --version "$(cat VERSION)" --output build/longview.cdx.json
 ```
 
-A lower scaling exponent means the metric grows more slowly as the conversation becomes longer. This is the primary LongView success criterion.
+The repository provides:
+
+- deterministic portable ZIP packaging;
+- canonical release manifests and channel feeds;
+- SHA-256 and optional OpenSSL signatures;
+- deterministic staged rollouts;
+- HTTPS-only updater downloads;
+- safe archive extraction;
+- atomic install, health check, and rollback;
+- macOS codesign/notarization and Windows Authenticode entrypoints;
+- Chromium Stable pin monitoring;
+- CycloneDX SBOM generation;
+- privacy, accessibility, crash-reporting, and security-update contracts;
+- a static release/evidence dashboard.
+
+Unsigned developer packages can be produced without credentials. Stable public packages remain blocked until Apple notarization and Windows signing credentials are supplied and controlled native evidence passes.
 
 ## Repository map
 
 ```text
-chromium.version              exact upstream tag and commit
-configs/gn/                   baseline/dev/release GN profiles
-product/extension/            working browser runtime and controls
-benchmarks/fixtures/          deterministic pathological long pages
-benchmarks/runner/            CDP runner, campaign, reports, and gates
-src/native/                   C++ policy, index, telemetry, and tests
-chromium_overlay/             installable policy and Blink feature probes
-patches/                      audited, pinned Chromium candidate patches
-tools/                        checkout, build, overlay, package, validation
-docs/                         architecture, evidence, compatibility, roadmap
+chromium.version              exact upstream Chromium tag and commit
+product/extension/            working long-page runtime and controls
+benchmarks/                   deterministic fixtures, CDP evidence, reports, gates
+src/native/                   v0.2 lifecycle/policy model
+src/engine/                   v0.3 controller, capsule, cold backend, scheduler contract
+chromium_overlay/             Chromium GN targets and Blink integration bridge
+release/                      platform packaging and update-channel definitions
+tools/release/                updater, rollback, manifest, package, SBOM utilities
+site/                         public release/evidence status dashboard
+docs/                         architecture, privacy, security, accessibility, acceptance
 ```
 
-## Validate the source tree
+## Current release boundary
 
-```bash
-python3 tools/generate_source_manifest.py
-python3 tools/validate_repository.py
-npm run check:js
-npm test
-PYTHONPATH=tools python3 -m unittest discover -s tools/tests -v
-cmake -S src/native -B build/native -DCMAKE_BUILD_TYPE=Release
-cmake --build build/native --parallel 2
-ctest --test-dir build/native --output-on-failure
-```
+v0.3.0 is a source and release-engineering milestone, not a claim that every Phase 7 production gate is already satisfied. The remaining hard gates are explicit in `docs/PHASE7_ACCEPTANCE.md`:
 
-Validation fails if `.longview-bootstrap` or a source-promotion workflow appears in a release tree. GitHub should contain normal source files, not encoded transport fragments.
-
-## What remains
-
-Patch `0001` now provides the disabled-by-default Blink feature gate. The next measured patch (`0002`) will introduce a document-scoped `LongPageSegment` observability controller and tracing only. It will not release cold layout/paint state until web tests cover geometry reads, focus, selection, find-in-page, anchors, accessibility, screenshot, print, and mutation behavior.
-
-See `docs/EVIDENCE_CAMPAIGN.md`, `docs/BLINK_NATIVE_PHASE3.md`, and `docs/IMPLEMENTATION_STATUS.md`.
+- real Blink derived-state release in full Chromium builds;
+- native web-platform compatibility tests;
+- controlled physical Mac and Windows evidence bundles;
+- signed/notarized public artifacts;
+- enabled GitHub Pages deployment;
+- an opt-in crash upload service after privacy review.
 
 ## License
 

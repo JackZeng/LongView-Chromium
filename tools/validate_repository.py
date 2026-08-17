@@ -106,10 +106,16 @@ def validate_required_layout() -> None:
         "product/extension/manifest.json", "benchmarks/fixtures/conversation/index.html",
         "benchmarks/runner/runner.mjs", "benchmarks/runner/campaign.mjs",
         "benchmarks/runner/cdp.mjs", "src/native/CMakeLists.txt",
-        "src/native/include/longview/policy_engine.h", "tools/generate_source_manifest.py",
-        "tools/longview_tools/blink_patch.py", "tools/longview_tools/overlay.py",
+        "src/native/include/longview/policy_engine.h", "src/engine/CMakeLists.txt",
+        "src/engine/include/longview/engine/long_page_controller.h",
+        "chromium_overlay/longview/blink/blink_cold_backend.h",
+        "tools/generate_source_manifest.py", "tools/longview_tools/blink_patch.py",
+        "tools/longview_tools/overlay.py", "tools/release/longview_release.py",
+        "tools/release/install_staged_update.py", "release/update-feed.schema.json",
+        "branding/product.json", "site/index.html", "site/data/status.json",
         "docs/EVIDENCE_CAMPAIGN.md", "docs/BLINK_NATIVE_PHASE3.md",
-        ".github/workflows/ci.yml",
+        "docs/PHASE7_ACCEPTANCE.md", "docs/RELEASE_ENGINEERING.md",
+        ".github/workflows/ci.yml", ".github/workflows/phase7-validation.yml",
     ]
     missing = [relative for relative in required if not (REPO / relative).is_file()]
     if missing:

@@ -1,0 +1,10 @@
+{
+  "productName": "LongView Chromium",
+  "shortName": "LongView",
+  "bundleId": "org.longview.chromium",
+  "windowsAppId": "LongViewChromium",
+  "updateProductId": "longview-chromium",
+  "homepage": "https://github.com/JackZeng/LongView-Chromium",
+  "privacyPolicy": "docs/PRIVACY.md",
+  "license": "BSD-3-Clause"
+}
