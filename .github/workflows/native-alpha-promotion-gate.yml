@@ -1,0 +1,105 @@
+name: native-alpha-promotion-gate
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/native-alpha-promotion-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: native-alpha-promotion-gate
+  cancel-in-progress: true
+
+jobs:
+  wait-and-promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait for a proof-carrying full-source macOS release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix='v0.4.0-blink-native-alpha.'
+          selected=''
+          for attempt in $(seq 1 330); do
+            selected="$(gh release list --limit 100 --json tagName,isPrerelease,publishedAt \
+              --jq '[.[] | select(.isPrerelease == true and (.tagName | startswith("'"$prefix"'")))] | sort_by(.publishedAt) | last | .tagName // ""')"
+            if [ -n "$selected" ]; then
+              mkdir -p "$RUNNER_TEMP/native-proof"
+              if gh release download "$selected" \
+                --dir "$RUNNER_TEMP/native-proof" \
+                --pattern 'native-cold-proof.json' \
+                --pattern 'BLINK_NATIVE_COLD.json' \
+                --pattern 'BROWSER_BINARY_SHA256.txt' \
+                --pattern 'PATCH_SHA256.txt' \
+                --pattern 'args.gn.resolved.txt'; then
+                break
+              fi
+              rm -rf "$RUNNER_TEMP/native-proof"
+              selected=''
+            fi
+            echo "Native browser proof not published yet (attempt $attempt/330)."
+            sleep 60
+          done
+          if [ -z "$selected" ]; then
+            echo 'Timed out waiting for a full-source native Alpha release.' >&2
+            exit 78
+          fi
+          echo "tag=$selected" >> "$GITHUB_OUTPUT"
+          echo "proof_dir=$RUNNER_TEMP/native-proof" >> "$GITHUB_OUTPUT"
+      - name: Independently verify native release proof
+        env:
+          PROOF_DIR: ${{ steps.release.outputs.proof_dir }}
+          TAG: ${{ steps.release.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json, os, re
+          root = Path(os.environ['PROOF_DIR'])
+          proof = json.loads((root / 'native-cold-proof.json').read_text())
+          assert proof['before'] > 0, proof
+          assert proof['detached'] > 0, proof
+          assert proof['after'] == 0, proof
+          assert proof['restored'] > 0, proof
+          assert abs(proof['heightBefore'] - proof['heightCold']) <= 2.0, proof
+          assert abs(proof['heightBefore'] - proof['heightRestored']) <= 2.0, proof
+          metadata = json.loads((root / 'BLINK_NATIVE_COLD.json').read_text())
+          assert metadata['feature'] == 'LongViewSegmentLifecycle', metadata
+          assert metadata['runtimeFeatureDefault'] == 'disabled', metadata
+          for name in ('BROWSER_BINARY_SHA256.txt', 'PATCH_SHA256.txt', 'args.gn.resolved.txt'):
+              path = root / name
+              assert path.is_file() and path.stat().st_size > 0, name
+          assert re.fullmatch(r'v0\.4\.0-blink-native-alpha\.\d+', os.environ['TAG'])
+          print(json.dumps({'tag': os.environ['TAG'], 'proof': proof}, indent=2))
+          PY
+          target="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .target_commitish)"
+          git fetch origin agent/blink-native-cold-alpha
+          git merge-base --is-ancestor "$target" origin/agent/blink-native-cold-alpha
+      - name: Merge the proven native Alpha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list --head agent/blink-native-cold-alpha --base main --state open --json number --jq '.[0].number')"
+          test -n "$pr"
+          gh pr comment "$pr" --body "Full-source Apple Silicon browser build and native LayoutObject detach/restore proof passed. Release: **${TAG}**. Promotion gate is merging this Alpha."
+          gh pr merge "$pr" --squash \
+            --subject 'Build the first Blink Native COLD macOS Alpha' \
+            --body "Compile the pinned Chromium source with the LongView native COLD patch, prove descendant LayoutObjects are detached and restored while geometry is retained, and ship the proof-carrying Apple Silicon Alpha ${TAG}."
