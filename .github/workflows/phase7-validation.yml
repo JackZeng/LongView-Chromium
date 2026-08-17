@@ -11,6 +11,7 @@ on:
       - "docs/PHASE7_ACCEPTANCE.md"
       - "docs/RELEASE_ENGINEERING.md"
       - ".github/workflows/phase7-validation.yml"
+      - ".github/workflows/manifest-refresh.yml"
   pull_request:
     paths:
       - "src/engine/**"
@@ -21,6 +22,7 @@ on:
       - "docs/PHASE7_ACCEPTANCE.md"
       - "docs/RELEASE_ENGINEERING.md"
       - ".github/workflows/phase7-validation.yml"
+      - ".github/workflows/manifest-refresh.yml"
   workflow_dispatch:
 permissions:
   contents: read
