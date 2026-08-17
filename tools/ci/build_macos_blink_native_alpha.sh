@@ -149,7 +149,10 @@ version="0.4.0-blink-native-alpha.${GITHUB_RUN_ID}"
 dist="dist/macos-native-alpha"
 rm -rf "$dist"
 mkdir -p "$dist/proof"
-cp -R "$out/Chromium.app" "$dist/LongView Chromium Native Alpha.app"
+export CHROMIUM_APP="$out/Chromium.app"
+export OUTPUT_APP="$dist/LongView Chromium Native Alpha.app"
+export LONGVIEW_VERSION="$version"
+bash tools/ci/package_macos_blink_native_alpha.sh
 cp build/native-alpha/BLINK_NATIVE_COLD.json "$dist/proof/"
 cp build/native-alpha/native-cold-proof.json "$dist/proof/"
 cp build/native-alpha/native-cold-proof.html "$dist/proof/"
@@ -159,10 +162,8 @@ cp patches/blink/0002-longview-native-cold-layout-detach.patch "$dist/proof/"
 cp chromium.version "$dist/proof/"
 git rev-parse HEAD > "$dist/proof/LONGVIEW_REPOSITORY_SHA.txt"
 shasum -a 256 patches/blink/0002-longview-native-cold-layout-detach.patch > "$dist/proof/PATCH_SHA256.txt"
-binary="$dist/LongView Chromium Native Alpha.app/Contents/MacOS/Chromium"
+binary="$dist/LongView Chromium Native Alpha.app/Contents/Resources/Chromium.app/Contents/MacOS/Chromium"
 shasum -a 256 "$binary" > "$dist/proof/BROWSER_BINARY_SHA256.txt"
-codesign --force --deep --sign - --timestamp=none "$dist/LongView Chromium Native Alpha.app"
-codesign --verify --deep --strict --verbose=2 "$dist/LongView Chromium Native Alpha.app"
 cat > "$dist/README-FIRST.txt" <<EOF
 LongView Chromium Blink Native macOS Alpha
 
@@ -176,8 +177,8 @@ LongView Blink native COLD patch. The proof directory contains the actual
 LayoutObject detach/restore result, resolved GN arguments, source SHAs, patch
 SHA-256 and browser binary SHA-256.
 
-Start with:
-open -a "LongView Chromium Native Alpha" --args --enable-blink-features=LongViewSegmentLifecycle
+Double-click "LongView Chromium Native Alpha.app". The native ARM64 launcher
+enables LongViewSegmentLifecycle and loads the bundled LongView runtime automatically.
 
 Gatekeeper may require right-click > Open or:
 xattr -dr com.apple.quarantine "LongView Chromium Native Alpha.app"
