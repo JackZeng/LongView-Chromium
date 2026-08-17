@@ -27,6 +27,7 @@ fe33b4b3c289e5b0ba3c2a8ec184a2356baaf9189cc83d3b25f73eb7332bbd55  .github/workfl
 e7e3e21447a2f902ea1621dc1533f70f9c25fe381eb55760cdb5fc0d136aa46f  .github/workflows/native-alpha-promotion-gate.yml
 6a24c5369a37969067f82460c4e1ae6e3382fc233e3339258bc824b2da4d3fa2  .github/workflows/native-alpha-v2-build-status.yml
 a6b7a442844813d392f9d9528f700ac88ddb2de79ff88eb2aebb28650b560c26  .github/workflows/native-alpha-v3-promotion-gate.yml
+eb7fc1e258bfd21eb9b4995fa747721337817c6ed975f460cfaaea7f94ee24fc  .github/workflows/native-alpha-v4-promotion-gate.yml
 548e4413b968a7ba7dc63cad69a179a0b28e8575e557e2c443091194d2af1935  .github/workflows/native-cold-contract.yml
 82d7603d321fc104a47c01f3f904d4ac331869297fcfc85b419592e08fcb8ce9  .github/workflows/pages.yml
 becc7e38a87a0c32de4556ce55f2a52d553e4dd2ffa6a18c4f62ff1a74e0e5a0  .github/workflows/phase7-validation.yml
