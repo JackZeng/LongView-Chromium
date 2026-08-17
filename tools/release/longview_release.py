@@ -66,18 +66,34 @@ class Artifact:
             raise ValueError(f"signature URL must use HTTPS: {self.signature_url}")
 
 
+def split_artifact_spec(spec: str) -> tuple[str, str, str, str | None]:
+    # platform:arch:path[:https://signature-url]
+    # Only the two structural prefixes are split. This preserves
+    # Windows drive letters, while the optional signature URL is
+    # identified by its mandatory HTTPS scheme.
+    parts = spec.split(":", 2)
+    if len(parts) != 3:
+        raise ValueError("artifact must be platform:arch:path[:https://signature-url]")
+    target_platform, arch, remainder = parts
+    signature_match = re.search(r":(https://.+)$", remainder)
+    if signature_match:
+        raw_path = remainder[:signature_match.start()]
+        signature_url = signature_match.group(1)
+    else:
+        raw_path = remainder
+        signature_url = None
+    if not raw_path:
+        raise ValueError("artifact path must not be empty")
+    return target_platform, arch, raw_path, signature_url
+
+
 def parse_artifact_spec(spec: str, base_url: str) -> Artifact:
-    # platform:arch:path[:signature-url]
-    parts = spec.split(":", 3)
-    if len(parts) < 3:
-        raise ValueError("artifact must be platform:arch:path[:signature-url]")
-    target_platform, arch, raw_path = parts[:3]
+    target_platform, arch, raw_path, signature_url = split_artifact_spec(spec)
     path = Path(raw_path).resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
     filename = path.name
     url = f"{base_url.rstrip('/')}/{filename}"
-    signature_url = parts[3] if len(parts) == 4 and parts[3] else None
     artifact = Artifact(
         platform=target_platform,
         arch=arch,

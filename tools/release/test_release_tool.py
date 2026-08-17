@@ -42,6 +42,15 @@ class ReleaseToolTest(unittest.TestCase):
             self.assertEqual(state["sha256"], longview_release.sha256_file(artifact))
             self.assertTrue(state["readyToInstall"])
 
+    def test_artifact_spec_preserves_windows_drive_and_signature_url(self) -> None:
+        target_platform, arch, raw_path, signature_url = longview_release.split_artifact_spec(
+            r"windows:x64:C:\\release\\LongView.zip:https://updates.example.test:8443/LongView.zip.sig"
+        )
+        self.assertEqual(target_platform, "windows")
+        self.assertEqual(arch, "x64")
+        self.assertEqual(raw_path, r"C:\\release\\LongView.zip")
+        self.assertEqual(signature_url, "https://updates.example.test:8443/LongView.zip.sig")
+
     def test_rollout_is_stable(self) -> None:
         first = update_client.rollout_bucket("machine", "stable", "1.2.3")
         second = update_client.rollout_bucket("machine", "stable", "1.2.3")
