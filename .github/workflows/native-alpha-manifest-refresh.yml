@@ -1,0 +1,39 @@
+name: native-alpha-manifest-refresh
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-alpha-source-manifest
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate exact source manifest
+        run: python tools/generate_source_manifest.py
+      - name: Commit current manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- SOURCE_MANIFEST.sha256; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add SOURCE_MANIFEST.sha256
+          git commit -m 'chore: refresh native Alpha source manifest'
+          git push origin HEAD:${GITHUB_REF_NAME}
