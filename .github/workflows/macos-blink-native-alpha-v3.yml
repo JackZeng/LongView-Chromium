@@ -1,0 +1,62 @@
+name: macos-blink-native-alpha-v3
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - "tools/ci/build_macos_blink_native_alpha_v3.sh"
+      - "tools/ci/package_macos_blink_native_alpha.sh"
+      - "configs/gn/longview-native-alpha-v3.gn"
+      - "tools/longview_tools/native_cold_patch.py"
+      - "tools/install_blink_native_cold.py"
+      - "patches/blink/0002-longview-native-cold-layout-detach.patch"
+      - "product/extension/**"
+      - ".github/workflows/macos-blink-native-alpha-v3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-blink-native-alpha-v3
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 360
+    env:
+      NINJA_SUMMARIZE_BUILD: "1"
+      GOMA_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build, prove, and package full-source native Alpha
+        shell: bash
+        run: bash tools/ci/build_macos_blink_native_alpha_v3.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LongView-Chromium-macOS-Blink-Native-Alpha-v3
+          path: dist/macos-native-alpha-v3/**
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish fixed-tag proof-carrying prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='v0.4.0-blink-native-alpha.latest'
+          version="$(cat dist/macos-native-alpha-v3/VERSION.txt)"
+          gh release delete "$tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$tag" \
+            dist/macos-native-alpha-v3/LongView-Chromium-macOS-arm64-Blink-Native-Alpha.zip \
+            dist/macos-native-alpha-v3/SHA256SUMS.txt \
+            dist/macos-native-alpha-v3/README-FIRST.txt \
+            dist/macos-native-alpha-v3/VERSION.txt \
+            dist/macos-native-alpha-v3/proof/* \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "LongView Chromium $version" \
+            --notes "Full-source Apple Silicon Blink Native Alpha. The attached proof shows descendant LayoutObjects before COLD, after native detach, and after materialization. Ad-hoc signed and not notarized."
