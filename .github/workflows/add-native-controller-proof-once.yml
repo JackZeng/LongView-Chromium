@@ -1,0 +1,78 @@
+name: add-native-controller-proof-once
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/add-native-controller-proof-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Expose per-segment native release proof and run it in the native build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          bridge=Path('product/extension/content/35-native-cold.js')
+          text=bridge.read_text(encoding='utf-8')
+          old='''        segment.nativeColdDetached = true;\n        segment.nativeDetachedLayoutObjects = detached;\n        this.stats.nativeColdSegments += 1;'''
+          new='''        segment.nativeColdDetached = true;\n        segment.nativeDetachedLayoutObjects = detached;\n        node.dataset.longviewNativeCold = "true";\n        node.dataset.longviewNativeDetached = String(detached);\n        this.stats.nativeColdSegments += 1;'''
+          if old not in text:
+              raise SystemExit('native detach accounting block changed unexpectedly')
+          text=text.replace(old,new,1)
+          old2='''      segment.nativeColdDetached = false;\n      this.stats.nativeColdSegments = Math.max(0, this.stats.nativeColdSegments - 1);'''
+          new2='''      segment.nativeColdDetached = false;\n      segment.node.dataset.longviewNativeCold = "false";\n      this.stats.nativeColdSegments = Math.max(0, this.stats.nativeColdSegments - 1);'''
+          if old2 not in text:
+              raise SystemExit('native materialization block changed unexpectedly')
+          text=text.replace(old2,new2,1)
+          bridge.write_text(text,encoding='utf-8',newline='\n')
+
+          build=Path('tools/ci/build_macos_blink_native_alpha_v3.sh')
+          body=build.read_text(encoding='utf-8')
+          anchor='''section "Package double-clickable native Alpha with proof"\n'''
+          addition='''section "Prove LongView controller drives native COLD"\nexport LONGVIEW_BROWSER="$browser"\nexport LONGVIEW_EXTENSION="$GITHUB_WORKSPACE/product/extension"\nexport PROOF_OUTPUT="$GITHUB_WORKSPACE/build/native-alpha-v3/native-controller-proof"\nbash "$GITHUB_WORKSPACE/tools/ci/prove_longview_native_controller.sh"\n\n'''
+          if addition not in body:
+              if anchor not in body:
+                  raise SystemExit('package section anchor changed unexpectedly')
+              body=body.replace(anchor,addition+anchor,1)
+          copy_anchor='''cp build/native-alpha-v3/native-cold-proof.html "$dist/proof/"\n'''
+          copy_add='''cp build/native-alpha-v3/native-controller-proof.json "$dist/proof/"\ncp build/native-alpha-v3/native-controller-proof.html "$dist/proof/"\n'''
+          if copy_add not in body:
+              if copy_anchor not in body:
+                  raise SystemExit('proof copy anchor changed unexpectedly')
+              body=body.replace(copy_anchor,copy_anchor+copy_add,1)
+          build.write_text(body,encoding='utf-8',newline='\n')
+          PY
+          rm .github/workflows/add-native-controller-proof-once.yml
+          python tools/generate_source_manifest.py
+      - name: Validate controller bridge and scripts
+        shell: bash
+        run: |
+          node --check product/extension/content/35-native-cold.js
+          node --test product/extension/tests/native-cold.test.mjs
+          bash -n tools/ci/build_macos_blink_native_alpha_v3.sh
+          bash -n tools/ci/prove_longview_native_controller.sh
+          python tools/validate_repository.py
+      - name: Commit end-to-end native proof gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: prove LongView COLD uses the Blink native release path'
+          git push origin HEAD:agent/blink-native-cold-alpha
