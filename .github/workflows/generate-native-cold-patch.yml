@@ -1,0 +1,142 @@
+name: generate-native-cold-patch
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - "tools/longview_tools/native_cold_patch.py"
+      - "tools/install_blink_native_cold.py"
+      - ".github/workflows/generate-native-cold-patch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-native-cold-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch exact pinned Blink files through Gitiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(python -c 'import json; print(json.load(open("chromium.version"))["commit"])')"
+          root="$RUNNER_TEMP/chromium-src"
+          mkdir -p "$root"
+          files=(
+            third_party/blink/renderer/platform/runtime_enabled_features.json5
+            third_party/blink/renderer/core/dom/node.h
+            third_party/blink/renderer/core/dom/node.cc
+            third_party/blink/renderer/core/dom/element.h
+            third_party/blink/renderer/core/dom/element.cc
+            third_party/blink/renderer/core/dom/element.idl
+          )
+          for path in "${files[@]}"; do
+            mkdir -p "$root/$(dirname "$path")"
+            curl --fail --location --retry 3 \
+              "https://chromium.googlesource.com/chromium/src/+/${commit}/${path}?format=TEXT" \
+              | base64 --decode > "$root/$path"
+          done
+          printf '%s\n' "$commit" > "$root/PINNED_COMMIT.txt"
+      - name: Create the exact behavior patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/chromium-src"
+          git -C "$source" init -q
+          git -C "$source" config user.name 'LongView Patch Generator'
+          git -C "$source" config user.email 'longview@example.invalid'
+          git -C "$source" add .
+          git -C "$source" commit -qm 'pinned Chromium source baseline'
+
+          PYTHONPATH=tools python - <<'PY'
+          from pathlib import Path
+          from longview_tools.blink_patch import install_runtime_feature
+          source = Path(__import__('os').environ['RUNNER_TEMP']) / 'chromium-src'
+          install_runtime_feature(source / 'third_party/blink/renderer/platform/runtime_enabled_features.json5')
+          PY
+          git -C "$source" add third_party/blink/renderer/platform/runtime_enabled_features.json5
+          git -C "$source" commit -qm 'install LongView runtime feature baseline'
+
+          mkdir -p build/native-cold patches/blink
+          PYTHONPATH=tools python tools/install_blink_native_cold.py \
+            --source "$source" \
+            --skip-pin-check \
+            --metadata build/native-cold/BLINK_NATIVE_COLD.json \
+            --patch-output patches/blink/0002-longview-native-cold-layout-detach.patch
+          test -s patches/blink/0002-longview-native-cold-layout-detach.patch
+          git -C "$source" diff --check
+      - name: Verify patch against a clean pinned copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/chromium-src"
+          clean="$RUNNER_TEMP/chromium-clean"
+          git clone -q "$source" "$clean"
+          git -C "$clean" reset -q --hard HEAD
+          git -C "$clean" apply --check "$GITHUB_WORKSPACE/patches/blink/0002-longview-native-cold-layout-detach.patch"
+          git -C "$clean" apply "$GITHUB_WORKSPACE/patches/blink/0002-longview-native-cold-layout-detach.patch"
+          grep -q 'longViewDetachDescendantLayoutObjects' "$clean/third_party/blink/renderer/core/dom/element.idl"
+          grep -q 'LongViewDetachLayoutTreeForCold' "$clean/third_party/blink/renderer/core/dom/node.cc"
+          grep -q 'RuntimeEnabledFeatures::LongViewSegmentLifecycleEnabled' "$clean/third_party/blink/renderer/core/dom/element.cc"
+          git -C "$clean" diff --check
+      - name: Update patch series and source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          path = Path('patches/blink/0002-longview-native-cold-layout-detach.patch')
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          series_path = Path('patches/series.json')
+          data = json.loads(series_path.read_text(encoding='utf-8'))
+          patches = [item for item in data.get('patches', []) if item.get('id') != 'blink-longview-native-cold-layout-detach']
+          patches.append({
+              'id': 'blink-longview-native-cold-layout-detach',
+              'path': 'blink/0002-longview-native-cold-layout-detach.patch',
+              'stage': 'alpha',
+              'feature': 'LongViewSegmentLifecycle',
+              'enabledByDefault': False,
+              'renderingBehaviorChange': True,
+              'proofCounter': 'nativeDetachedLayoutObjects',
+              'sha256': digest,
+          })
+          data['patches'] = patches
+          series_path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+          proof = Path('build/native-cold/BLINK_NATIVE_COLD.json')
+          proof_data = json.loads(proof.read_text(encoding='utf-8'))
+          proof_data['patchSha256'] = digest
+          proof_data['chromiumCommit'] = json.loads(Path('chromium.version').read_text())['commit']
+          Path('docs/native-cold-patch-proof.json').write_text(json.dumps(proof_data, indent=2) + '\n', encoding='utf-8')
+          PY
+          python tools/generate_source_manifest.py
+      - name: Commit generated patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            patches/blink/0002-longview-native-cold-layout-detach.patch \
+            patches/series.json \
+            docs/native-cold-patch-proof.json \
+            SOURCE_MANIFEST.sha256
+          if git diff --cached --quiet; then
+            echo 'Generated patch is already current.'
+            exit 0
+          fi
+          git commit -m 'feat: generate pinned Blink native cold patch'
+          git push origin HEAD:${GITHUB_REF_NAME}
