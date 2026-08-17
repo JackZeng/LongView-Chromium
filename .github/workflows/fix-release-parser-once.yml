@@ -3,6 +3,7 @@ name: fix-release-parser-once
 on:
   push:
     branches: [agent/phase7-release-candidate]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -69,8 +70,6 @@ jobs:
               artifact.validate()
               return artifact
           '''
-          # Remove indentation introduced by the YAML block while preserving
-          # the function bodies themselves.
           replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in replacement.splitlines())
           source_path.write_text(source[:start] + replacement + source[end:], encoding='utf-8', newline='\n')
 
