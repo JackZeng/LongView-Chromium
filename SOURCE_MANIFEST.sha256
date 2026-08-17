@@ -33,6 +33,7 @@ fe33b4b3c289e5b0ba3c2a8ec184a2356baaf9189cc83d3b25f73eb7332bbd55  .github/workfl
 0ef88754e6efd0c3a8ce3d5cc0e3531bcb889337e2cf5a39351cfefb07e4b728  .github/workflows/native-alpha-final-promotion-gate.yml
 4efabf265a50d0881743c9dbd917ccd6f18fb867b4a0fe787154a36034431e97  .github/workflows/native-alpha-manifest-refresh.yml
 e7e3e21447a2f902ea1621dc1533f70f9c25fe381eb55760cdb5fc0d136aa46f  .github/workflows/native-alpha-promotion-gate.yml
+c6f9be0d97096e1950c1f71eca04d9fa56bbdca88215d684ef02d1eae6d8820d  .github/workflows/native-alpha-proven-promotion-gate.yml
 6a24c5369a37969067f82460c4e1ae6e3382fc233e3339258bc824b2da4d3fa2  .github/workflows/native-alpha-v2-build-status.yml
 a6b7a442844813d392f9d9528f700ac88ddb2de79ff88eb2aebb28650b560c26  .github/workflows/native-alpha-v3-promotion-gate.yml
 eb7fc1e258bfd21eb9b4995fa747721337817c6ed975f460cfaaea7f94ee24fc  .github/workflows/native-alpha-v4-promotion-gate.yml
