@@ -3,6 +3,7 @@ name: refresh-source-manifest
 # This maintenance workflow is intentionally excluded from SOURCE_MANIFEST.sha256
 # so it can safely retrigger checks after an Actions-authored manifest commit.
 # Keep it content-neutral: it may change without invalidating the source manifest.
+# A connector-authored change here is also the canonical final RC gate trigger.
 on:
   push:
     branches: [main, "agent/**"]
