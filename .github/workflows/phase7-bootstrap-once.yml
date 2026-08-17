@@ -85,9 +85,12 @@ jobs:
                   text = text.replace(old, new, 1)
               cli.write_text(text, encoding='utf-8', newline='\n')
 
-          namespace['update_cli'] = robust_update_cli
-          sys.argv = [str(apply_path), str(repo), str(payload)]
-          raise SystemExit(namespace['main']())
+          namespace['copy_payload'](payload, repo)
+          namespace['update_versions'](repo)
+          robust_update_cli(repo)
+          namespace['update_validator'](repo)
+          namespace['update_gitignore'](repo)
+          print('Applied LongView 0.3.0 Phase 7 source payload')
           PY
           rm -rf .phase7-transport
           rm .github/workflows/phase7-bootstrap-once.yml
