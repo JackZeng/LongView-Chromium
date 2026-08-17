@@ -1,0 +1,68 @@
+name: publish-native-alpha-source-snapshot
+
+on:
+  push:
+    branches: ["agent/blink-native-cold-alpha"]
+    paths:
+      - ".github/workflows/publish-native-alpha-source-snapshot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate and package source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/generate_source_manifest.py --check
+          python tools/validate_repository.py
+          mkdir -p dist/source
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          root = Path('.').resolve()
+          output = root / 'dist/source/LongView-Chromium-0.4.0-Blink-Native-Alpha-source.zip'
+          excluded = {'.git', 'dist', 'build', '__pycache__'}
+          files = []
+          for path in root.rglob('*'):
+              if not path.is_file():
+                  continue
+              relative = path.relative_to(root)
+              if any(part in excluded for part in relative.parts):
+                  continue
+              files.append(relative)
+          with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for relative in sorted(files):
+                  info = zipfile.ZipInfo(str(relative), date_time=(2026, 1, 1, 0, 0, 0))
+                  info.external_attr = (0o100644 & 0xFFFF) << 16
+                  archive.writestr(info, (root / relative).read_bytes())
+          digest = hashlib.sha256(output.read_bytes()).hexdigest()
+          (root / 'dist/source/SHA256SUMS.txt').write_text(f'{digest}  {output.name}\n')
+          (root / 'dist/source/COMMIT.txt').write_text(__import__('subprocess').check_output(['git','rev-parse','HEAD'], text=True))
+          PY
+      - name: Publish replaceable source snapshot prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='v0.4.0-blink-native-alpha-source-snapshot'
+          gh release delete "$tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$tag" \
+            dist/source/LongView-Chromium-0.4.0-Blink-Native-Alpha-source.zip \
+            dist/source/SHA256SUMS.txt \
+            dist/source/COMMIT.txt \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title 'LongView Chromium 0.4.0 Blink Native Alpha Source Snapshot' \
+            --notes 'Reproducible source snapshot for the open Blink Native COLD Alpha PR. This is source, not the compiled browser artifact.'
